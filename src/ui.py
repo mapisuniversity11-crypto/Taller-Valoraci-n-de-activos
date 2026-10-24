@@ -373,6 +373,8 @@ def css_portada_metal(duracion: float = 6.0) -> str:
     # bloque, antes de que el recuadro de la portada termine de cargar, y así la app
     # no se alcanza a ver por debajo. Se desvanece junto con la portada.
     return f"""<style>
+/* Fondo negro mientras dura la portada (la app aún no se ha dibujado) */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{ background: #000 !important; }}
 .qp-telon {{
     position: fixed; inset: 0; z-index: 999999; background: #000;
     animation: qp-salida 0.9s ease-in {salida:.2f}s forwards;
@@ -484,3 +486,184 @@ body {{ animation: qp-fin .9s ease-in {salida:.2f}s forwards; }}
   requestAnimationFrame(cuadro);
 }})();
 </script></body></html>"""
+
+
+# ---------------------------------------------------------------------------
+# Tema "luxury" negro y dorado para la app (solo presentación)
+# ---------------------------------------------------------------------------
+import base64 as _base64
+from functools import lru_cache as _lru_cache
+from pathlib import Path as _Path
+
+ORO = "#d9b56a"
+ORO_CLARO = "#f1d9a0"
+TEXTO = "#f3efe6"
+TENUE = "#9b9384"
+LINEA = "#2b261d"
+# Colores para series (10 acciones): familia dorada con acentos sobrios distinguibles
+PALETA = ["#f1d9a0", "#d9b56a", "#a8814a", "#e8e2d4", "#c98a6a",
+          "#7fa58a", "#8aa0b8", "#b79ad0", "#d07a7a", "#9c8f7a"]
+ESCALA_CORR = [[0.0, "#7a3b33"], [0.5, "#15130f"], [1.0, "#e6c47e"]]
+
+_ICONO_CONTROLES = (
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
+    "stroke='%232a1d08' stroke-width='2' stroke-linecap='round'><line x1='4' y1='7' x2='20' y2='7'/>"
+    "<line x1='4' y1='17' x2='20' y2='17'/><circle cx='9' cy='7' r='2.4' fill='%23e9c77d'/>"
+    "<circle cx='15' cy='17' r='2.4' fill='%23e9c77d'/></svg>"
+)
+
+
+@_lru_cache(maxsize=1)
+def _franja_b64() -> str:
+    ruta = _Path(__file__).resolve().parent / "assets" / "franja.jpg"
+    return _base64.b64encode(ruta.read_bytes()).decode() if ruta.exists() else ""
+
+
+def css_global() -> str:
+    """Estilos de toda la app: fondo negro, tarjetas, botón dorado, pestañas,
+    panel lateral de entradas y la "bolita" dorada que lo abre."""
+    return f"""<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
+
+.stApp, [data-testid="stAppViewContainer"] {{ background: #070706 !important; }}
+.stApp p, .stApp label, .stApp li, .stApp input, .stApp textarea,
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 {{ font-family: 'Inter', 'Segoe UI', sans-serif; }}
+.stApp h2, .stApp h3 {{ font-weight: 400; letter-spacing: .02em; }}
+[data-testid="stMainBlockContainer"] {{ padding-top: 1.2rem; padding-bottom: 6rem; max-width: 1440px; }}
+[data-testid="stAppDeployButton"] {{ display: none !important; }}
+[data-testid="stHeader"], [data-testid="stToolbar"] {{
+    background: transparent !important; backdrop-filter: none !important; filter: none !important;
+    transform: none !important; overflow: visible !important; }}
+
+/* ---------- Tarjetas (contenedores con key que empieza por "tarjeta") ---------- */
+[class*="st-key-tarjeta"] {{
+    background: linear-gradient(180deg, #15130f, #0f0e0c);
+    border: 1px solid {LINEA}; border-radius: 14px; padding: 20px 22px 14px; }}
+.q-titulo {{ margin: 0 0 4px; font-size: 13px; font-weight: 500; letter-spacing: .22em;
+    text-transform: uppercase; color: {ORO_CLARO}; }}
+.q-nota {{ font-size: 12px; color: {TENUE}; line-height: 1.5; margin: 2px 0 6px; }}
+[data-testid="stWidgetLabel"] p {{ font-size: 12px !important; color: {TENUE} !important; letter-spacing: .04em; }}
+[data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="base-input"] {{
+    background: #0a0908 !important; border-color: #2f2a20 !important; border-radius: 8px !important; }}
+
+/* ---------- Botón principal dorado ---------- */
+[data-testid="stBaseButton-primary"] {{
+    background: linear-gradient(135deg, #b8893d, #f1d9a0 45%, #c79a4b 70%, #9c7231) !important;
+    border: 0 !important; border-radius: 999px !important; padding: .8rem 2.2rem !important;
+    box-shadow: 0 10px 40px rgba(217,181,106,.25), inset 0 1px 0 rgba(255,255,255,.5);
+    transition: transform .2s ease, filter .2s ease; }}
+[data-testid="stBaseButton-primary"] p {{ color: #1a1307 !important; font-weight: 600 !important;
+    letter-spacing: .18em; text-transform: uppercase; font-size: 13px !important; }}
+[data-testid="stBaseButton-primary"]:hover {{ filter: brightness(1.07); transform: translateY(-1px); }}
+[data-testid="stBaseButton-secondary"] {{ border-color: #3a3224 !important; border-radius: 999px !important; }}
+[data-testid="stBaseButton-secondary"]:hover {{ border-color: {ORO} !important; }}
+[data-testid="stBaseButton-secondary"]:hover p {{ color: {ORO_CLARO} !important; }}
+
+/* ---------- Pestañas ---------- */
+[data-testid="stTab"] p {{ text-transform: uppercase; letter-spacing: .16em; font-size: 13px !important; color: {TENUE}; }}
+[data-testid="stTab"][aria-selected="true"] p {{ color: {ORO_CLARO}; }}
+
+/* ---------- Panel lateral de entradas ---------- */
+[data-testid="stSidebar"] {{ background: linear-gradient(180deg, #14120e, #0b0a08) !important;
+    border-right: 1px solid #3a3224; }}
+[data-testid="stSidebarCollapseButton"] button {{ border: 1px solid #3a3224 !important; border-radius: 50% !important; }}
+[data-testid="stSidebar"] [data-testid="stExpander"] details {{ border: 0 !important;
+    border-top: 1px solid #241f17 !important; border-radius: 0 !important; background: transparent !important; }}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p {{ font-size: 12px !important;
+    letter-spacing: .2em; text-transform: uppercase; color: {ORO_CLARO} !important; }}
+
+/* ---------- Bolita dorada: el botón que abre el panel de entradas ---------- */
+[data-testid="stExpandSidebarButton"] {{
+    position: fixed !important; top: auto !important; left: auto !important;
+    right: 40px !important; bottom: 40px !important; z-index: 1000 !important;
+    width: 66px !important; height: 66px !important; min-height: 0 !important; padding: 0 !important;
+    border-radius: 50% !important; border: 0 !important;
+    background: radial-gradient(circle at 35% 30%, #fff3cf, #e2bd72 35%, #a97c35 75%, #7a5522) !important;
+    box-shadow: 0 12px 34px rgba(217,181,106,.35), 0 0 0 6px rgba(217,181,106,.12) !important;
+    transition: transform .2s ease, box-shadow .2s ease; }}
+[data-testid="stExpandSidebarButton"] > * {{ opacity: 0 !important; }}
+[data-testid="stExpandSidebarButton"]::before {{ content: ""; position: absolute; inset: 0;
+    background: url("{_ICONO_CONTROLES}") center / 28px no-repeat; }}
+[data-testid="stExpandSidebarButton"]::after {{ content: "Entradas"; position: absolute; right: 80px; top: 50%;
+    transform: translateY(-50%); white-space: nowrap; padding: 7px 12px; border-radius: 8px;
+    background: #14120e; border: 1px solid {LINEA}; color: {ORO_CLARO}; font: 500 12px 'Inter', sans-serif;
+    letter-spacing: .08em; opacity: 0; transition: opacity .2s ease; pointer-events: none; }}
+[data-testid="stExpandSidebarButton"]:hover {{ transform: scale(1.06);
+    box-shadow: 0 16px 40px rgba(217,181,106,.45), 0 0 0 8px rgba(217,181,106,.16) !important; }}
+[data-testid="stExpandSidebarButton"]:hover::after {{ opacity: 1; }}
+
+/* ---------- Franja superior y tarjetas de cifras ---------- */
+.q-franja {{ position: relative; overflow: hidden; border-radius: 16px; border: 1px solid {LINEA};
+    background: #000 url("data:image/jpeg;base64,{_franja_b64()}") center 42% / cover no-repeat;
+    margin-bottom: 18px; }}
+.q-franja::after {{ content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,.25) 100%); }}
+.q-franja .dentro {{ position: relative; z-index: 1; display: flex; align-items: center;
+    justify-content: space-between; gap: 18px; flex-wrap: wrap; padding: 30px 40px; }}
+.q-marca {{ font-family: 'Cinzel', 'Times New Roman', serif; letter-spacing: .24em; color: #fff; line-height: 1; }}
+.q-eyebrow {{ font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: {ORO}; }}
+.q-desc {{ color: #cfc7b6; margin-top: 10px; font-size: 14px; letter-spacing: .03em; }}
+.q-chips {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+.q-chip {{ padding: 4px 12px; border-radius: 999px; border: 1px solid #3a3224; color: {ORO_CLARO};
+    font-size: 12px; background: rgba(0,0,0,.35); }}
+.q-kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 6px 0 22px; }}
+.q-kpi {{ background: linear-gradient(180deg, #15130f, #0f0e0c); border: 1px solid {LINEA};
+    border-radius: 14px; padding: 18px 20px; transition: border-color .25s ease, transform .25s ease; }}
+.q-kpi:hover {{ border-color: {ORO}; transform: translateY(-2px); }}
+.q-kpi .v {{ font-size: 30px; font-weight: 300; margin-top: 8px; color: {TEXTO}; font-variant-numeric: tabular-nums; }}
+.q-kpi .s {{ font-size: 12px; color: {TENUE}; margin-top: 4px; }}
+.q-panel-cab {{ margin: 4px 0 10px; }}
+.q-panel-cab .t {{ font-size: 20px; font-weight: 300; color: {TEXTO}; margin-top: 6px; }}
+.q-resumen {{ color: {TENUE}; font-size: 12px; letter-spacing: .06em; padding-top: 14px; }}
+</style>"""
+
+
+def html_franja_entradas() -> str:
+    return """<div class="q-franja"><div class="dentro"><div>
+<div class="q-eyebrow">Paso 1 · Configura el análisis</div>
+<div class="q-marca" style="font-size:44px;margin-top:12px">QUANTIA</div>
+<div class="q-desc">Define la cartera, el período y los parámetros. Luego ejecuta el análisis.</div>
+</div></div></div>"""
+
+
+def html_franja_resultados(chips: list[str]) -> str:
+    etiquetas = "".join(f'<span class="q-chip">{c}</span>' for c in chips)
+    return f"""<div class="q-franja"><div class="dentro" style="padding:26px 40px">
+<div class="q-marca" style="font-size:30px">QUANTIA</div><div class="q-chips">{etiquetas}</div>
+</div></div>"""
+
+
+def html_kpis(items: list[tuple[str, str, str]]) -> str:
+    """items: (etiqueta, valor, nota)."""
+    tarjetas = "".join(
+        f'<div class="q-kpi"><div class="q-eyebrow">{e}</div><div class="v">{v}</div><div class="s">{s}</div></div>'
+        for e, v, s in items
+    )
+    return f'<div class="q-kpis">{tarjetas}</div>'
+
+
+def titulo_tarjeta(texto: str) -> str:
+    return f'<div class="q-titulo">{texto}</div>'
+
+
+def estilo_fig(fig, alto: int | None = None):
+    """Aplica el tema negro y dorado a una figura de Plotly."""
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, Segoe UI, sans-serif", color=TEXTO, size=12),
+        colorway=PALETA, legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=TENUE)),
+        margin=dict(l=10, r=10, t=30, b=10), hoverlabel=dict(bgcolor="#14120e", bordercolor=ORO),
+    )
+    fig.update_xaxes(gridcolor="#221e17", zerolinecolor="#2b261d", linecolor="#2b261d", tickfont=dict(color=TENUE))
+    fig.update_yaxes(gridcolor="#221e17", zerolinecolor="#2b261d", linecolor="#2b261d", tickfont=dict(color=TENUE))
+    if alto:
+        fig.update_layout(height=alto)
+    return fig
+
+
+_MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def mes_anio(fecha) -> str:
+    """'oct 2023' (mes en español)."""
+    return f"{_MESES[fecha.month - 1]} {fecha.year}"

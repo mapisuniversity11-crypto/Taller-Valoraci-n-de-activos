@@ -38,9 +38,11 @@ pytest
 
 ```
 app.py              Interfaz Streamlit (solo muestra; no calcula)
+.streamlit/         Tema de la app (negro y dorado)
 src/
   config.py         Valores por defecto (tickers, fechas, α, h, semilla...)
-  ui.py             Elementos visuales (pantalla de bienvenida)
+  ui.py             Elementos visuales: portada, tema negro y dorado, tarjetas
+  assets/           Imagen de la franja superior
   datos.py          Paso 2  — descarga, limpieza, calidad, respaldo CSV
   calibracion.py    Paso 3  — retornos, σ, μ, covarianzas
   crr.py            Paso 8  — árbol binomial CRR

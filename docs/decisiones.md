@@ -126,6 +126,15 @@ precisa. La diferencia esperada es pequeña y se documentará en la semana 2.
 **Nota:** al buscar la tasa en la web, dos fuentes daban valores distintos para la misma semana
 (3,86 % y 4,27 %), otra razón para tomarla directamente del mercado al ejecutar.
 
+## D14 — Diseño de la interfaz en dos fases
+**Fecha:** 2026-10-23
+**Decisión:** al abrir la app (tras la portada) solo se muestran las entradas, a pantalla completa y
+agrupadas en tarjetas. Al ejecutar, aparecen los resultados y las entradas pasan a un panel lateral
+que se abre con un botón dorado flotante. Tema negro y dorado (Cinzel para la marca, Inter para el texto).
+**Por qué:** separa la configuración del análisis, deja todo el espacio a los resultados y mantiene
+las entradas a un clic para recalcular. El panel usa la barra lateral propia de Streamlit (se abre
+desde la izquierda), que es más estable que un panel construido a mano.
+
 ---
 
 _Plantilla para nuevas decisiones:_

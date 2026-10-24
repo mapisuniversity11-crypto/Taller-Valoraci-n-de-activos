@@ -1,0 +1,13 @@
+# Tema de Quantia: negro y dorado
+[theme]
+base = "dark"
+primaryColor = "#d9b56a"
+backgroundColor = "#070706"
+secondaryBackgroundColor = "#15130f"
+textColor = "#f3efe6"
+borderColor = "#2b261d"
+linkColor = "#f1d9a0"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap, sans-serif"
+
+[client]
+toolbarMode = "minimal"
