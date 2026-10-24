@@ -1,9 +1,9 @@
 {
   "fuente": "Yahoo Finance (yfinance)",
-  "consulta": "2026-10-23T22:58:14",
-  "inicio": "2022-10-23",
-  "ultimo_dia_solicitado": "2026-10-23",
-  "end_exclusivo_usado": "2026-10-24",
+  "consulta": "2026-10-24T09:13:15",
+  "inicio": "2022-10-24",
+  "ultimo_dia_solicitado": "2026-10-24",
+  "end_exclusivo_usado": "2026-10-25",
   "tickers": [
     "AAPL",
     "MSFT",

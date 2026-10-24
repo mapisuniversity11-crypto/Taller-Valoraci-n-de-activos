@@ -497,13 +497,14 @@ from pathlib import Path as _Path
 
 ORO = "#d9b56a"
 ORO_CLARO = "#f1d9a0"
+PLOTLY_CONFIG = {"displayModeBar": False}   # sin barra de herramientas sobre los gráficos
 TEXTO = "#f3efe6"
 TENUE = "#9b9384"
 LINEA = "#2b261d"
 # Colores para series (10 acciones): familia dorada con acentos sobrios distinguibles
 PALETA = ["#f1d9a0", "#d9b56a", "#a8814a", "#e8e2d4", "#c98a6a",
           "#7fa58a", "#8aa0b8", "#b79ad0", "#d07a7a", "#9c8f7a"]
-ESCALA_CORR = [[0.0, "#7a3b33"], [0.5, "#15130f"], [1.0, "#e6c47e"]]
+ESCALA_CORR = [[0.0, "#8a3f36"], [0.5, "#15130f"], [1.0, "#9c7738"]]   # tonos oscuros: el texto blanco se lee
 
 _ICONO_CONTROLES = (
     "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
@@ -559,6 +560,11 @@ def css_global() -> str:
 [data-testid="stBaseButton-secondary"]:hover {{ border-color: {ORO} !important; }}
 [data-testid="stBaseButton-secondary"]:hover p {{ color: {ORO_CLARO} !important; }}
 
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{ padding: .7rem 1rem !important; }}
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] p {{ letter-spacing: .12em; font-size: 12px !important; }}
+/* Avisos promocionales de Streamlit (la app no usa notificaciones propias) */
+[data-testid^="stToast"] {{ display: none !important; }}
+
 /* ---------- Pestañas ---------- */
 [data-testid="stTab"] p {{ text-transform: uppercase; letter-spacing: .16em; font-size: 13px !important; color: {TENUE}; }}
 [data-testid="stTab"][aria-selected="true"] p {{ color: {ORO_CLARO}; }}
@@ -612,9 +618,21 @@ def css_global() -> str:
 .q-kpi:hover {{ border-color: {ORO}; transform: translateY(-2px); }}
 .q-kpi .v {{ font-size: 30px; font-weight: 300; margin-top: 8px; color: {TEXTO}; font-variant-numeric: tabular-nums; }}
 .q-kpi .s {{ font-size: 12px; color: {TENUE}; margin-top: 4px; }}
+.q-check {{ display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid #221e17;
+    color: #ddd5c4; font-size: 14px; line-height: 1.5; }}
+.q-check:last-child {{ border-bottom: 0; }}
+.q-check .ic {{ flex: 0 0 22px; height: 22px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 12px; font-weight: 700; }}
+.q-check .ok {{ background: rgba(127,165,138,.18); color: #9fd1ad; }}
+.q-check .no {{ background: rgba(208,122,122,.18); color: #e59a9a; }}
 .q-panel-cab {{ margin: 4px 0 10px; }}
 .q-panel-cab .t {{ font-size: 20px; font-weight: 300; color: {TEXTO}; margin-top: 6px; }}
 .q-resumen {{ color: {TENUE}; font-size: 12px; letter-spacing: .06em; padding-top: 14px; }}
+.q-lectura {{ margin: 6px 0 10px; padding: 12px 16px; border-radius: 10px; border: 1px solid #3a3224;
+    background: rgba(217,181,106,.06); color: #ddd5c4; font-size: 14px; line-height: 1.6; }}
+.q-lectura .et {{ display: block; font-size: 10px; letter-spacing: .28em; text-transform: uppercase;
+    color: {ORO}; margin-bottom: 4px; }}
+.q-lectura b {{ color: {ORO_CLARO}; font-weight: 600; }}
 </style>"""
 
 
@@ -667,3 +685,22 @@ _MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", 
 def mes_anio(fecha) -> str:
     """'oct 2023' (mes en español)."""
     return f"{_MESES[fecha.month - 1]} {fecha.year}"
+
+
+def html_lectura(texto: str) -> str:
+    """Recuadro con la interpretación en lenguaje sencillo de un gráfico."""
+    return f'<div class="q-lectura"><span class="et">Lectura</span>{texto}</div>'
+
+
+def colores_sector(sectores: list[str]) -> dict[str, str]:
+    """Un color fijo por sector, el mismo en todos los gráficos."""
+    tonos = ["#f1d9a0", "#c98a6a", "#7fa58a", "#8aa0b8", "#b79ad0", "#d9b56a", "#9c8f7a"]
+    return {s: tonos[i % len(tonos)] for i, s in enumerate(dict.fromkeys(sectores))}
+
+
+def html_checklist(items: list[tuple[bool, str]]) -> str:
+    filas = "".join(
+        f'<div class="q-check"><span class="ic {"ok" if ok else "no"}">{"✓" if ok else "!"}</span><span>{t}</span></div>'
+        for ok, t in items
+    )
+    return f"<div>{filas}</div>"

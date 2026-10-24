@@ -135,6 +135,17 @@ que se abre con un botón dorado flotante. Tema negro y dorado (Cinzel para la m
 las entradas a un clic para recalcular. El panel usa la barra lateral propia de Streamlit (se abre
 desde la izquierda), que es más estable que un panel construido a mano.
 
+## D15 — Parámetros del GBM para proyectar desde hoy
+**Fecha:** 2026-10-24
+**Decisión:** la pestaña GBM calibra a y σ con los **últimos 504 retornos hasta hoy** (no con la
+ventana de calibración inicial, que termina hace un año). S0 es el último cierre sin ajustar y el
+drift es a = μ total − q (Paso 7). Se simulan 5.000 trayectorias por acción con Δt = 1/252; la
+semilla de cada acción es la semilla de la app más la posición de la acción en la lista.
+**Por qué:** se proyecta hacia adelante desde hoy, así que conviene usar la información más reciente
+con la misma longitud de ventana. La ventana de calibración inicial se reserva para el backtest
+(Paso 13), donde sí importa no usar datos posteriores a cada fecha. Sumar la posición a la semilla
+evita que todas las acciones reciban los mismos números aleatorios, sin perder reproducibilidad.
+
 ---
 
 _Plantilla para nuevas decisiones:_
