@@ -209,3 +209,130 @@ def lectura_mercado(cmp: dict, v_am: float, bid, ask, vol_impl, sigma: float) ->
               "que las cotizaciones pueden estar diferidas. Una diferencia por sí sola no indica una oportunidad de "
               "arbitraje: comprar y vender tiene costos.")
     return texto
+
+
+# ---------------------------------------------------------------------------
+# Riesgo (Paso 10)
+# ---------------------------------------------------------------------------
+def lectura_var(capital: float, alpha: float, h: int, var: float, es: float, peor: float, metodo: str) -> str:
+    veces = round(alpha * 100)
+    return (f"En {veces} de cada 100 períodos de {h} días, la cartera de {_usd(capital)} no debería perder más de "
+            f"<b>{_usd(var)}</b> (método {metodo}). Si llega uno de esos períodos malos (el {100 - veces} % restante), "
+            f"la pérdida promedio sería de <b>{_usd(es)}</b>. La peor pérdida real de {h} días en los datos fue de "
+            f"<b>{_usd(peor)}</b>: el VaR no es la peor pérdida posible, es un umbral que se supera pocas veces.")
+
+
+def lectura_metodos(hist: float, normal: float, mc: float) -> str:
+    alto = max(("histórico", hist), ("normal", normal), ("Monte Carlo", mc), key=lambda x: x[1])
+    return (f"Los tres métodos dan cifras del mismo orden; el más conservador es el <b>{alto[0]}</b>. El histórico usa "
+            "las pérdidas que realmente ocurrieron, incluidos los días extremos (colas pesadas), por eso suele dar más. "
+            "El normal supone una campana y media cero. El Monte Carlo simula el GBM con el crecimiento esperado de "
+            "las acciones, que compensa parte de la pérdida.")
+
+
+def lectura_excepciones(n_exc: int, n_dias: int, alpha: float, zona: str) -> str:
+    esperadas = n_dias * (1 - alpha)
+    texto = (f"En los últimos {n_dias} días hubo <b>{n_exc}</b> días en que la pérdida real superó el VaR diario; con "
+             f"un VaR del {alpha:.0%} se esperaban unos {_num(esperadas, 1)}. Resultado: <b>zona {zona}</b> del "
+             "semáforo de Basilea")
+    if zona == "verde" and n_exc < esperadas / 2:
+        texto += (": el VaR funcionó, e incluso fue algo conservador, porque el último año fue tranquilo para "
+                  "esta cartera.")
+    elif zona == "verde":
+        texto += ": el VaR funcionó como se esperaba."
+    else:
+        texto += ": hubo más pérdidas grandes de las esperadas; el VaR subestimó el riesgo."
+    return texto
+
+
+def lectura_fuera_muestra(f, capital: float, fecha_inicio) -> str:
+    return (f"Una cartera de {_usd(capital)} comprada el {fecha_inicio:%Y-%m-%d} con estos pesos valdría hoy "
+            f"<b>{_usd(f.valor.iloc[-1])}</b> (<b>{_pct(f.rentabilidad)}</b>, después de pagar {_usd(f.costos)} de "
+            f"costos de compra). Su peor caída desde un máximo fue de <b>{_pct(f.caida_maxima)}</b>.")
+
+
+def lectura_estres(tabla, var: float) -> str:
+    veces = tabla["Pérdida"] / var
+    return (f"En estos escenarios de crisis la cartera perdería entre {_usd(tabla['Pérdida'].min())} y "
+            f"{_usd(tabla['Pérdida'].max())}, es decir, entre {_num(veces.min(), 1)} y {_num(veces.max(), 1)} veces "
+            "el VaR. Recuerdan que una crisis puede costar bastante más que un período malo normal.")
+
+
+# ---------------------------------------------------------------------------
+# Asignación (Pasos 11 y 12)
+# ---------------------------------------------------------------------------
+def _lista(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " y " + items[-1]
+
+
+def lectura_asignacion(w_min, var_min: float, var_ig: float, var_inv: float, w_max: float) -> str:
+    topes = [t for t in w_min.index if w_min[t] >= w_max - 1e-6]
+    minimos = [t for t in w_min.index if w_min[t] <= 0.02 + 1e-6]
+    texto = (f"La cartera de <b>mínimo VaR</b> tiene un VaR de <b>{_usd(var_min)}</b>, un "
+             f"<b>{_pct(1 - var_min / var_ig, 0)}</b> menos que con pesos iguales ({_usd(var_ig)}). ")
+    if topes:
+        texto += f"Pone el máximo permitido en {_lista(topes)}, las acciones más estables o menos correlacionadas"
+        texto += f", y el mínimo en {_lista(minimos)}. " if minimos else ". "
+    texto += (f"La cartera inversa al VaR ({_usd(var_inv)}) también reduce el riesgo, pero como ignora las "
+              "correlaciones no llega al mínimo.")
+    return texto
+
+
+def lectura_compra(tabla, capital: float, var_real: float) -> str:
+    efectivo = capital - tabla["Monto invertido"].sum()
+    return (f"Comprando acciones enteras se invierten <b>{_usd(tabla['Monto invertido'].sum())}</b> y quedan "
+            f"<b>{_usd(efectivo)}</b> en efectivo. Con los pesos reales resultantes, el VaR de la cartera es de "
+            f"{_usd(var_real)}.")
+
+
+def lectura_correccion(pasos: list[str], max_sector: float) -> str:
+    if not pasos:
+        return (f"En la cartera inversa al VaR ningún sector superaba el {_pct(max_sector, 0)}, así que no hizo falta "
+                "corregir la concentración sectorial: la cartera corregida es igual a la original.")
+    return "Ajustes hechos: " + " ".join(pasos)
+
+
+def lectura_presupuesto(p, v_max: float) -> str:
+    if p.f >= 1:
+        return (f"Con todo el capital invertido el VaR sería de {_usd(p.var_total)}, que ya está dentro del presupuesto "
+                f"de {_usd(v_max)}: se invierte todo y no queda efectivo.")
+    return (f"Con todo el capital invertido el VaR sería de {_usd(p.var_total)}, por encima del presupuesto de "
+            f"{_usd(v_max)}. Por eso se invierte solo el <b>{_pct(p.f, 0)}</b> ({_usd(p.invertido.sum())}) y se dejan "
+            f"<b>{_usd(p.efectivo)}</b> en efectivo sin riesgo; así el VaR baja a {_usd(p.var_ajustado)}.")
+
+
+def lectura_estrategias(info: dict) -> str:
+    mejor = max(info, key=lambda k: info[k]["rentabilidad"])
+    menor_caida = max(info, key=lambda k: info[k]["caida_maxima"])
+    mensual = info.get("Mínimo VaR · rebalanceo mensual", {})
+    texto = (f"En el último año, la estrategia con mayor rentabilidad fue <b>{mejor}</b> "
+             f"({_pct(info[mejor]['rentabilidad'])}) y la de menor caída fue <b>{menor_caida}</b> "
+             f"({_pct(info[menor_caida]['caida_maxima'])}). ")
+    if mensual:
+        texto += (f"El mínimo VaR con rebalanceo mensual hizo {mensual['rebalanceos']} rebalanceos y pagó "
+                  f"{_usd(mensual['costos'])} en costos. ")
+    texto += ("Estas carteras buscan controlar el riesgo, no maximizar la ganancia: menos riesgo no garantiza más "
+              "rentabilidad en un año particular.")
+    return texto
+
+
+# ---------------------------------------------------------------------------
+# Evaluación del GBM (Paso 13)
+# ---------------------------------------------------------------------------
+def lectura_evaluacion(res, h: int) -> str:
+    gana = int((res["¿Le gana al ingenuo?"] == "Sí").sum())
+    mg, mi = res["MAPE GBM (%)"].mean(), res["MAPE ingenuo (%)"].mean()
+    cob = res["Cobertura P10–P90"].mean()
+    dias = "un día" if h == 1 else f"{h} días"
+    return (f"El GBM le gana al pronóstico ingenuo en <b>{gana} de {len(res)}</b> acciones, pero por márgenes mínimos "
+            f"(MAPE promedio de {_num(mg, 3)} % frente a {_num(mi, 3)} %). A {dias}, el pronóstico del GBM es casi igual "
+            "al precio de hoy, porque el crecimiento esperado en tan poco tiempo es muy pequeño: ningún modelo adivina "
+            "de forma consistente el precio exacto. Donde el GBM sí funciona es en el <b>rango</b>: el precio real cayó "
+            f"dentro de la banda P10–P90 el <b>{_pct(cob, 0)}</b> de las veces, cerca del 80 % esperado.")
+
+
+def lectura_evaluacion_accion(fila, ticker: str) -> str:
+    return (f"En <b>{ticker}</b>, el GBM se equivoca en promedio por <b>{_usd(fila['RMSE GBM'])}</b> "
+            f"({_num(fila['MAPE GBM (%)'], 2)} % del precio); el ingenuo, por {_usd(fila['RMSE ingenuo'])} "
+            f"({_num(fila['MAPE ingenuo (%)'], 2)} %). El precio real quedó dentro de la banda el "
+            f"{_pct(fila['Cobertura P10–P90'], 0)} de las veces.")

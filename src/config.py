@@ -37,6 +37,7 @@ D: int = 252                 # sesiones por año
 CAPITAL: float = 100_000.0   # USD
 TASA_LIBRE_RIESGO: float = 0.04   # r manual de respaldo; por defecto la app usa ^IRX de Yahoo (D13)
 SEMILLA: int = 42
+COSTO_TRANSACCION: float = 0.001   # 0,10 % del monto negociado
 
 # --- Riesgo (Paso 10) ------------------------------------------------------
 ALPHA: float = 0.99
@@ -53,7 +54,7 @@ N_ESCENARIOS_VAR: int = 20_000
 DT: float = 1 / D
 
 # --- Estrategias y evaluación (Pasos 12 y 13) ------------------------------
-PRESUPUESTO_RIESGO: float = 5_000.0   # V, USD de VaR máximo permitido (ajustable)
+PRESUPUESTO_RIESGO: float = 4_000.0   # V, USD de VaR máximo permitido (ajustable, D21)
 H_ROLLING: int = 1                    # sesiones de pronóstico del rolling
 
 # --- Árbol CRR (Paso 8) ----------------------------------------------------

@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src import calibracion, config, crr, datos, gbm, lecturas, opciones, ui
+from src import asignacion, calibracion, config, crr, datos, gbm, lecturas, opciones, riesgo, rolling, ui
 
 st.set_page_config(page_title="Quantia", layout="wide", initial_sidebar_state="collapsed")
 
@@ -118,7 +118,9 @@ def seccion_cartera():
                                 "semanas (^IRX). Si falla, se usan los valores manuales.")
     r = st.number_input("Tasa libre de riesgo r manual (decimal, anual)", value=config.TASA_LIBRE_RIESGO,
                         format="%.4f", key="r_manual")
-    return dict(capital=capital, alpha=alpha, h_var=h_var, semilla=semilla, auto_q_r=auto_q_r, r=r)
+    costo = st.number_input("Costo de transacción (% del monto negociado)", value=config.COSTO_TRANSACCION * 100,
+                            min_value=0.0, max_value=5.0, step=0.05, format="%.2f", key="costo_pct") / 100
+    return dict(capital=capital, alpha=alpha, h_var=h_var, semilla=semilla, auto_q_r=auto_q_r, r=r, costo=costo)
 
 
 def seccion_opcion(tickers):
@@ -858,10 +860,310 @@ with tabs[2]:
                             f'medida física P (drift a = {a_op:.2%}) y {c_el["Sesiones"]} sesiones '
                             f'(T GBM = {c_el["T GBM"]:.4f} años).</div>', unsafe_allow_html=True)
 
-for i, texto in [(3, "VaR y ES histórico, normal y Monte Carlo · entrega 2"),
-                 (4, "Asignación por mínimo VaR y estrategias · entrega 3"),
-                 (5, "Rolling del GBM, RMSE y MAPE · entrega 2")]:
-    with tabs[i]:
-        with st.container(key=f"tarjeta_pendiente_{i}"):
-            st.markdown(ui.titulo_tarjeta("Pendiente"), unsafe_allow_html=True)
-            st.markdown(f'<div class="q-nota">{texto}</div>', unsafe_allow_html=True)
+# ---------------------------------------------------------------------------
+# Riesgo (Paso 10): VaR y ES por tres métodos, excepciones, fuera de muestra y estrés
+# Estimación con la ventana de calibración; el último año queda para evaluar (D19).
+# ---------------------------------------------------------------------------
+# Carteras (Paso 11), estimadas con la ventana de calibración. Se usan en Riesgo y en Asignación.
+B, alpha_v, h_v = float(cartera["capital"]), float(cartera["alpha"]), int(cartera["h_var"])
+cal_v, ev_v = ventanas["calibracion"], ventanas["evaluacion"]
+cov_v = calibracion.covarianza_diaria(cal_v, "simple")
+opt = asignacion.minimo_var(cov_v, sect, config.W_MIN, config.W_MAX, config.MAX_SECTOR)
+w_inv = asignacion.pesos_inverso_var(cov_v, B, alpha_v, h_v)
+w_inv_corr, pasos_corr = asignacion.corregir_sectores(w_inv, sect, config.MAX_SECTOR, config.W_MIN, config.W_MAX)
+carteras = {"Pesos iguales": asignacion.pesos_iguales(tickers), "Inverso al VaR": w_inv,
+            "Inverso al VaR · corregido por sector": w_inv_corr}
+if opt.exito:
+    carteras["Mínimo VaR"] = opt.pesos
+
+with tabs[3]:
+    nombres_c = list(carteras)
+    c_sel, _ = st.columns([1, 2])
+    with c_sel:
+        cartera_v = st.selectbox("Cartera evaluada", nombres_c, key="riesgo_cartera",
+                                 index=nombres_c.index("Mínimo VaR") if "Mínimo VaR" in nombres_c else 0)
+    w_v = carteras[cartera_v]
+    r_hist = riesgo.var_historico(cal_v, w_v, B, alpha_v, h_v)
+    r_norm = riesgo.var_normal(cov_v, w_v, B, alpha_v, h_v)
+    r_mc = riesgo.var_montecarlo(cal_v, w_v, B, alpha_v, h_v, config.N_ESCENARIOS_VAR, semilla_base)
+    exc = riesgo.excepciones(limpio.ajustados, w_v, B, alpha_v, ev_v.index[1])
+    n_exc = int(exc["Excepción"].sum())
+    zona = riesgo.zona_basilea(n_exc, len(exc), alpha_v)
+    conf = f"{alpha_v:.0%} · {h_v} días"
+
+    st.markdown(f'<div class="q-nota">Cartera evaluada: <b>{cartera_v}</b>, {lecturas._usd(B)}. Los pesos de cada '
+                'cartera se ven en la pestaña Asignación.</div>', unsafe_allow_html=True)
+    st.markdown(ui.html_kpis([
+        (f"VaR Monte Carlo · {conf}", lecturas._usd(r_mc["var"]), f"{r_mc['var'] / B:.1%} del capital".replace(".", ",")),
+        ("Pérdida promedio en la cola (ES)", lecturas._usd(r_mc["es"]), "promedio del peor 1 % de escenarios"),
+        (f"Peor pérdida real de {h_v} días", lecturas._usd(r_hist["peor"]), f"{r_hist['fecha_peor']:%Y-%m-%d}"),
+        ("Excepciones en el último año", f"{n_exc} de {len(exc)}", f"esperadas ≈ {len(exc) * (1 - alpha_v):.1f} · zona {zona}"
+         .replace(".", ",")),
+    ]), unsafe_allow_html=True)
+
+    with st.container(key="tarjeta_var"):
+        st.markdown(ui.titulo_tarjeta(f"¿Cuánto podría perder la cartera en {h_v} días?"), unsafe_allow_html=True)
+        v1, v2 = st.columns([1.5, 1], gap="medium")
+        with v1:
+            fig_v = px.histogram(x=r_mc["perdidas"], nbins=90, color_discrete_sequence=[ui.ORO])
+            fig_v.update_traces(marker_line_width=0, opacity=.8,
+                                hovertemplate="Pérdida %{x:,.0f} USD: %{y} escenarios<extra></extra>")
+            fig_v.add_vline(x=0, line_color="#3a3224")
+            fig_v.add_vline(x=r_mc["var"], line_color=ui.ORO_CLARO, line_dash="dot", annotation_text="VaR",
+                            annotation_font_color=ui.ORO_CLARO)
+            fig_v.add_vline(x=r_mc["es"], line_color=ui.PALETA[8], line_dash="dot", annotation_text="ES",
+                            annotation_font_color=ui.PALETA[8], annotation_position="top right")
+            fig_v.update_xaxes(title_text=f"Pérdida en {h_v} días (USD) · negativa = ganancia")
+            fig_v.update_yaxes(title_text="Escenarios simulados")
+            fig_v.update_layout(showlegend=False, bargap=0.02)
+            st.plotly_chart(ui.estilo_fig(fig_v, 380), width="stretch", config=ui.PLOTLY_CONFIG)
+        with v2:
+            st.markdown(ui.html_lectura(lecturas.lectura_var(B, alpha_v, h_v, r_mc["var"], r_mc["es"], r_hist["peor"],
+                                                             "Monte Carlo")), unsafe_allow_html=True)
+            metodos = pd.DataFrame([
+                {"Método": "Histórico", "VaR": r_hist["var"], "ES": r_hist["es"]},
+                {"Método": "Normal", "VaR": r_norm["var"], "ES": r_norm["es"]},
+                {"Método": "Monte Carlo", "VaR": r_mc["var"], "ES": r_mc["es"]},
+            ])
+            metodos["% del capital"] = metodos["VaR"] / B
+            st.dataframe(metodos.style.format({"VaR": "{:,.0f}", "ES": "{:,.0f}", "% del capital": "{:.1%}"}),
+                         hide_index=True, width="stretch")
+        st.markdown(ui.html_lectura(lecturas.lectura_metodos(r_hist["var"], r_norm["var"], r_mc["var"])),
+                    unsafe_allow_html=True)
+        with st.expander("Ver detalle de los métodos"):
+            st.markdown(f"""
+- **Histórico:** {r_hist['n']} bloques de {h_v} días **solapados** de la ventana de calibración (un bloque por cada día
+  de inicio). Hay más bloques, pero los vecinos comparten días y no son independientes.
+- **Normal (Ec. 9):** VaR = B · Φ⁻¹(α) · √(h · wᵀΣ_R w), con Σ_R la covarianza diaria de retornos simples y media cero.
+- **Monte Carlo:** {f"{config.N_ESCENARIOS_VAR:,}".replace(",", ".")} escenarios GBM conjuntos bajo P (correlaciones de la ventana de
+  calibración, factorización de Cholesky), cartera mantenida sin rebalanceo durante los {h_v} días.
+- **Cuantil:** método "higher" (la menor pérdida observada que deja al menos el {alpha_v:.0%} de los casos por debajo).
+  **ES:** promedio de las pérdidas mayores o iguales al VaR (los empates entran en la cola).
+- **Ventana de estimación:** {cal_v.index[1]:%Y-%m-%d} a {cal_v.index[-1]:%Y-%m-%d}. El último año se usa solo para evaluar.
+""")
+
+    x1, x2 = st.columns(2, gap="medium")
+    with x1, st.container(key="tarjeta_exc"):
+        st.markdown(ui.titulo_tarjeta("¿El VaR funcionó? · último año"), unsafe_allow_html=True)
+        fig_e = go.Figure()
+        fig_e.add_trace(go.Bar(x=exc.index, y=exc["Pérdida real"], name="Pérdida real diaria",
+                               marker_color=np.where(exc["Excepción"], ui.PALETA[8], "rgba(217,181,106,.45)"),
+                               hovertemplate="%{x|%Y-%m-%d}: %{y:,.0f} USD<extra></extra>"))
+        fig_e.add_trace(go.Scatter(x=exc.index, y=exc["VaR diario"], name="VaR diario", mode="lines",
+                                   line=dict(color=ui.ORO_CLARO, width=2)))
+        fig_e.update_yaxes(title_text="USD (positivo = pérdida)")
+        fig_e.update_layout(legend=dict(orientation="h", y=1.12, x=0), bargap=0)
+        st.plotly_chart(ui.estilo_fig(fig_e, 300), width="stretch", config=ui.PLOTLY_CONFIG)
+        st.markdown(ui.html_lectura(lecturas.lectura_excepciones(n_exc, len(exc), alpha_v, zona)), unsafe_allow_html=True)
+    with x2, st.container(key="tarjeta_estres"):
+        st.markdown(ui.titulo_tarjeta("Escenarios de estrés"), unsafe_allow_html=True)
+        tabla_e, info_e = riesgo.estres(w_v, sect, cov_v, B, alpha_v, h_v)
+        tabla_e["Veces el VaR"] = tabla_e["Pérdida"] / r_norm["var"]
+        st.dataframe(tabla_e.style.format({"Pérdida": "{:,.0f}", "Veces el VaR": "{:.1f}"}),
+                     hide_index=True, width="stretch")
+        st.markdown(ui.html_lectura(lecturas.lectura_estres(tabla_e, r_norm["var"])), unsafe_allow_html=True)
+        st.markdown(f'<div class="q-nota">Sector de mayor peso: {info_e["sector_mayor"]}'
+                    f'{" (empate entre sectores: se toma el primero de la cartera)" if info_e["empate"] else ""}. '
+                    '"Veces el VaR" se compara con el VaR normal.</div>', unsafe_allow_html=True)
+
+    with st.container(key="tarjeta_oos"):
+        st.markdown(ui.titulo_tarjeta("¿Cómo le fue a la cartera en el último año?"), unsafe_allow_html=True)
+        fm = riesgo.fuera_de_muestra(ev_v, w_v, B, float(cartera["costo"]))
+        st.markdown(ui.html_lectura(lecturas.lectura_fuera_muestra(fm, B, ev_v.index[0])), unsafe_allow_html=True)
+        with st.expander("Ver la evolución del valor y las caídas"):
+            fig_o = go.Figure()
+            fig_o.add_trace(go.Scatter(x=fm.valor.index, y=fm.valor, mode="lines", name="Valor de la cartera",
+                                       line=dict(color=ui.ORO_CLARO, width=2), fill="tozeroy",
+                                       fillcolor="rgba(217,181,106,.08)"))
+            fig_o.add_hline(y=B, line_color=ui.TENUE, line_dash="dot", annotation_text="Capital inicial",
+                            annotation_font_color=ui.TENUE)
+            fig_o.update_yaxes(title_text="USD", range=[fm.valor.min() * 0.97, fm.valor.max() * 1.02])
+            st.plotly_chart(ui.estilo_fig(fig_o, 300), width="stretch", config=ui.PLOTLY_CONFIG)
+            fig_dd = go.Figure(go.Scatter(x=fm.caida.index, y=fm.caida, mode="lines", fill="tozeroy",
+                                          line=dict(color=ui.PALETA[8], width=1.5), fillcolor="rgba(208,122,122,.18)",
+                                          name="Caída desde el máximo"))
+            fig_dd.update_yaxes(tickformat=".0%", title_text="Caída desde el máximo")
+            st.plotly_chart(ui.estilo_fig(fig_dd, 220), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown(f'<div class="q-nota">Compra el {ev_v.index[0]:%Y-%m-%d} con costo de '
+                        f'{float(cartera["costo"]):.2%} del monto y mantenimiento sin rebalanceo. Precios ajustados '
+                        '(incluyen dividendos).</div>', unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Asignación (Pasos 11 y 12)
+# ---------------------------------------------------------------------------
+with tabs[4]:
+    if not opt.exito:
+        st.error("No se pudo calcular la cartera de mínimo VaR: " + (" ".join(opt.problemas) or opt.mensaje))
+    else:
+        w_mv = opt.pesos
+        vars_c = {n: asignacion.var_cartera(w, cov_v, B, alpha_v, h_v) for n, w in carteras.items()}
+        compra = asignacion.acciones_enteras(w_mv, B, s0_hoy)
+        w_real = compra["Peso real"]
+        var_real = asignacion.var_cartera(w_real, cov_v, B, alpha_v, h_v)
+        checks = asignacion.verificar(w_mv, sect, config.W_MIN, config.W_MAX, config.MAX_SECTOR)
+        checks.append((opt.exito, f"El optimizador encontró solución ({opt.mensaje})."))
+
+        st.markdown(ui.html_kpis([
+            ("VaR · mínimo VaR", lecturas._usd(vars_c["Mínimo VaR"]), f"{alpha_v:.0%} · {h_v} días · VaR normal"),
+            ("Menos riesgo que pesos iguales", f"{1 - vars_c['Mínimo VaR'] / vars_c['Pesos iguales']:.0%}",
+             f"frente a {lecturas._usd(vars_c['Pesos iguales'])}"),
+            ("Efectivo sobrante", lecturas._usd(B - compra["Monto invertido"].sum()), "al comprar acciones enteras"),
+            ("Restricciones", f"{sum(ok for ok, _ in checks)} de {len(checks)} ✓", "suma, límites por acción y por sector"),
+        ]), unsafe_allow_html=True)
+
+        with st.container(key="tarjeta_pesos"):
+            st.markdown(ui.titulo_tarjeta("¿Cuánto invertir en cada acción? · tres carteras"), unsafe_allow_html=True)
+            orden_a = lecturas.orden_por_sector(tickers, sect)
+            largo_w = pd.concat([
+                pd.DataFrame({"Ticker": orden_a, "Peso": carteras[n][orden_a].to_numpy(), "Cartera": n})
+                for n in ("Pesos iguales", "Inverso al VaR", "Mínimo VaR")
+            ])
+            fig_w = px.bar(largo_w, x="Ticker", y="Peso", color="Cartera", barmode="group",
+                           color_discrete_sequence=[ui.TENUE, ui.PALETA[4], ui.ORO_CLARO])
+            fig_w.add_hline(y=config.W_MAX, line_dash="dot", line_color=ui.ORO, annotation_text="Máximo 20 %",
+                            annotation_font_color=ui.ORO)
+            fig_w.add_hline(y=config.W_MIN, line_dash="dot", line_color="#3a3224", annotation_text="Mínimo 2 %",
+                            annotation_font_color=ui.TENUE, annotation_position="bottom right")
+            fig_w.update_yaxes(tickformat=".0%", title_text="Peso en la cartera")
+            fig_w.update_xaxes(title_text="")
+            fig_w.update_layout(legend=dict(orientation="h", y=1.1, x=0, title=""))
+            st.plotly_chart(ui.estilo_fig(fig_w, 380), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown(ui.html_lectura(lecturas.lectura_asignacion(w_mv, vars_c["Mínimo VaR"], vars_c["Pesos iguales"],
+                                                                    vars_c["Inverso al VaR"], config.W_MAX)),
+                        unsafe_allow_html=True)
+            with st.expander("Ver la comparación detallada de las carteras"):
+                comp = pd.DataFrame([{
+                    "Cartera": n, "VaR": vars_c[n], "VaR (% del capital)": vars_c[n] / B,
+                    "Peso máximo": w.max(), "Sector de mayor peso": asignacion.peso_por_sector(w, sect).idxmax(),
+                    "Peso de ese sector": asignacion.peso_por_sector(w, sect).max(),
+                } for n, w in carteras.items()])
+                st.dataframe(comp.style.format({"VaR": "{:,.0f}", "VaR (% del capital)": "{:.1%}", "Peso máximo": "{:.1%}",
+                                                "Peso de ese sector": "{:.1%}"}), hide_index=True, width="stretch")
+                st.markdown(ui.html_lectura(lecturas.lectura_correccion(pasos_corr, config.MAX_SECTOR)),
+                            unsafe_allow_html=True)
+                st.markdown('<div class="q-nota">Solo se usa el riesgo: covarianza de la ventana de calibración con '
+                            'media cero, sin rentabilidad esperada, Sharpe ni momentum. La cartera inversa al VaR '
+                            'ignora las correlaciones, por eso no es una solución óptima.</div>', unsafe_allow_html=True)
+
+        b1, b2 = st.columns([1.4, 1], gap="medium")
+        with b1, st.container(key="tarjeta_compra"):
+            st.markdown(ui.titulo_tarjeta("Orden de compra · cartera de mínimo VaR"), unsafe_allow_html=True)
+            tabla_c = compra.assign(Sector=[sect[t] for t in compra.index]).reset_index(names="Ticker")
+            st.dataframe(tabla_c[["Ticker", "Sector", "Peso objetivo", "Monto objetivo", "Precio", "Acciones",
+                                  "Monto invertido", "Peso real"]].style.format({
+                "Peso objetivo": "{:.1%}", "Monto objetivo": "{:,.0f}", "Precio": "{:.2f}", "Monto invertido": "{:,.0f}",
+                "Peso real": "{:.1%}"}), hide_index=True, width="stretch")
+            st.markdown(ui.html_lectura(lecturas.lectura_compra(compra, B, var_real)), unsafe_allow_html=True)
+        with b2, st.container(key="tarjeta_checks_asig"):
+            st.markdown(ui.titulo_tarjeta("Verificación de restricciones"), unsafe_allow_html=True)
+            st.markdown(ui.html_checklist(checks), unsafe_allow_html=True)
+            ps_mv = asignacion.peso_por_sector(w_mv, sect)
+            fig_s = px.bar(x=ps_mv.values, y=ps_mv.index, orientation="h", color_discrete_sequence=[ui.ORO])
+            fig_s.add_vline(x=config.MAX_SECTOR, line_dash="dot", line_color=ui.PALETA[8], annotation_text="Tope 35 %",
+                            annotation_font_color=ui.PALETA[8])
+            fig_s.update_xaxes(tickformat=".0%", title_text="Peso por sector", range=[0, 0.4])
+            fig_s.update_yaxes(title_text="")
+            st.plotly_chart(ui.estilo_fig(fig_s, 240), width="stretch", config=ui.PLOTLY_CONFIG)
+
+        with st.container(key="tarjeta_estrategias_bt"):
+            st.markdown(ui.titulo_tarjeta("Estrategias en el último año"), unsafe_allow_html=True)
+            bt, info_bt = asignacion.backtest(limpio.ajustados, ev_v.index[0],
+                                              {"Pesos iguales": carteras["Pesos iguales"],
+                                               "Inverso al VaR · corregido por sector": w_inv_corr,
+                                               "Mínimo VaR · sin rebalanceo": w_mv},
+                                              sect, B, float(cartera["costo"]), config.N_CALIBRACION,
+                                              config.W_MIN, config.W_MAX, config.MAX_SECTOR)
+            colores_bt = [ui.TENUE, ui.PALETA[4], ui.ORO, ui.ORO_CLARO]
+            fig_bt = go.Figure()
+            for color, nombre in zip(colores_bt, bt.columns):
+                fig_bt.add_trace(go.Scatter(x=bt.index, y=bt[nombre], mode="lines", name=nombre,
+                                            line=dict(color=color, width=2.5 if "mensual" in nombre else 1.6)))
+            fig_bt.add_hline(y=B, line_dash="dot", line_color="#3a3224")
+            fig_bt.update_yaxes(title_text="Valor de la cartera (USD)")
+            fig_bt.update_layout(legend=dict(orientation="h", y=1.15, x=0))
+            st.plotly_chart(ui.estilo_fig(fig_bt, 360), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown(ui.html_lectura(lecturas.lectura_estrategias(info_bt)), unsafe_allow_html=True)
+            with st.expander("Ver resultados de cada estrategia"):
+                st.dataframe(pd.DataFrame([{"Estrategia": n, **{k: v for k, v in i.items()}} for n, i in info_bt.items()])
+                             .rename(columns={"costos": "Costos", "rebalanceos": "Rebalanceos", "rentabilidad": "Rentabilidad",
+                                              "caida_maxima": "Caída máxima", "valor_final": "Valor final"})
+                             .style.format({"Costos": "{:,.0f}", "Rentabilidad": "{:.1%}", "Caída máxima": "{:.1%}",
+                                            "Valor final": "{:,.0f}"}), hide_index=True, width="stretch")
+                st.markdown(f'<div class="q-nota">Todas las estrategias compran el {ev_v.index[0]:%Y-%m-%d} y pagan '
+                            f'{float(cartera["costo"]):.2%} sobre lo negociado. El rebalanceo mensual recalcula el mínimo '
+                            f'VaR el primer día hábil de cada mes con los {config.N_CALIBRACION} retornos anteriores '
+                            '(sin datos futuros).</div>', unsafe_allow_html=True)
+
+        with st.container(key="tarjeta_presupuesto"):
+            v_max = float(estrategias["presupuesto_v"])
+            st.markdown(ui.titulo_tarjeta(f"Presupuesto de riesgo · VaR máximo {lecturas._usd(v_max)}"),
+                        unsafe_allow_html=True)
+            pres = asignacion.presupuesto_riesgo(w_mv, cov_v, B, alpha_v, h_v, v_max)
+            st.markdown(ui.html_kpis([
+                ("Fracción invertida f", f"{pres.f:.0%}", "f = mín{1, V / VaR con todo invertido}"),
+                ("Invertido en acciones", lecturas._usd(pres.invertido.sum()), "cartera de mínimo VaR"),
+                ("En efectivo", lecturas._usd(pres.efectivo), "sin riesgo"),
+                ("VaR resultante", lecturas._usd(pres.var_ajustado), f"antes: {lecturas._usd(pres.var_total)}"),
+            ]), unsafe_allow_html=True)
+            st.markdown(ui.html_lectura(lecturas.lectura_presupuesto(pres, v_max)), unsafe_allow_html=True)
+            st.markdown('<div class="q-nota">El presupuesto V se cambia en el panel de entradas (sección Estrategias). '
+                        'La elección de la opción no cambia esta asignación, que se basa solo en el VaR.</div>',
+                        unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Evaluación del GBM (Paso 13)
+# ---------------------------------------------------------------------------
+with tabs[5]:
+    h_r = int(estrategias["h_rolling"])
+    det_r, res_r = rolling.rolling_gbm(limpio.ajustados, ev_v.index[0], h_r, 252)
+    gana = int((res_r["¿Le gana al ingenuo?"] == "Sí").sum())
+    st.markdown(ui.html_kpis([
+        ("MAPE promedio · GBM", f"{res_r['MAPE GBM (%)'].mean():.3f} %".replace(".", ","), f"pronóstico a {h_r} sesión(es)"),
+        ("MAPE promedio · ingenuo", f"{res_r['MAPE ingenuo (%)'].mean():.3f} %".replace(".", ","), "mañana = precio de hoy"),
+        ("El GBM le gana al ingenuo", f"{gana} de {len(res_r)}", "acciones con menor MAPE"),
+        ("Precio dentro de la banda P10–P90", f"{res_r['Cobertura P10–P90'].mean():.0%}", "se espera alrededor de 80 %"),
+    ]), unsafe_allow_html=True)
+    st.markdown(ui.html_lectura(lecturas.lectura_evaluacion(res_r, h_r)), unsafe_allow_html=True)
+
+    with st.container(key="tarjeta_rolling"):
+        st.markdown(ui.titulo_tarjeta("Pronóstico frente a precio real"), unsafe_allow_html=True)
+        r1, _ = st.columns([1, 2])
+        with r1:
+            t_r = st.selectbox("Acción", tickers, key="rolling_ticker")
+        d_r = det_r[t_r]
+        fila_r = res_r.set_index("Ticker").loc[t_r]
+        fig_r = go.Figure()
+        fig_r.add_trace(go.Scatter(x=d_r["Fecha objetivo"], y=d_r["P90"], mode="lines", line=dict(width=0),
+                                   showlegend=False, hoverinfo="skip"))
+        fig_r.add_trace(go.Scatter(x=d_r["Fecha objetivo"], y=d_r["P10"], mode="lines", line=dict(width=0), fill="tonexty",
+                                   fillcolor="rgba(217,181,106,.15)", name="Banda P10–P90 del GBM", hoverinfo="skip"))
+        fig_r.add_trace(go.Scatter(x=d_r["Fecha objetivo"], y=d_r["Observado"], mode="lines", name="Precio real",
+                                   line=dict(color=ui.TEXTO, width=1.6)))
+        fig_r.add_trace(go.Scatter(x=d_r["Fecha objetivo"], y=d_r["Pronóstico GBM"], mode="lines", name="Pronóstico GBM",
+                                   line=dict(color=ui.ORO_CLARO, width=1.6, dash="dot")))
+        fig_r.update_yaxes(title_text="Precio ajustado (USD)")
+        fig_r.update_layout(legend=dict(orientation="h", y=1.12, x=0), hovermode="x unified")
+        st.plotly_chart(ui.estilo_fig(fig_r, 360), width="stretch", config=ui.PLOTLY_CONFIG)
+        fig_err = go.Figure(go.Bar(x=d_r["Fecha objetivo"], y=d_r["Error GBM"], name="Error del GBM",
+                                   marker_color=np.where(d_r["Error GBM"] >= 0, ui.PALETA[5], ui.PALETA[8])))
+        fig_err.update_yaxes(title_text="Error (USD)")
+        fig_err.update_layout(bargap=0, showlegend=False)
+        st.plotly_chart(ui.estilo_fig(fig_err, 200), width="stretch", config=ui.PLOTLY_CONFIG)
+        st.markdown(ui.html_lectura(lecturas.lectura_evaluacion_accion(fila_r, t_r)), unsafe_allow_html=True)
+
+    with st.container(key="tarjeta_rolling_tabla"):
+        st.markdown(ui.titulo_tarjeta("RMSE y MAPE de las 10 acciones"), unsafe_allow_html=True)
+        st.dataframe(res_r.drop(columns=["Desde", "Hasta"]).style.format({
+            "RMSE GBM": "{:.3f}", "RMSE ingenuo": "{:.3f}", "MAPE GBM (%)": "{:.3f}", "MAPE ingenuo (%)": "{:.3f}",
+            "Cobertura P10–P90": "{:.0%}"}), hide_index=True, width="stretch")
+        with st.expander("Ver detalle del método"):
+            st.markdown(f"""
+- **Ventana móvil:** para cada fecha de origen t se usan los 252 log-retornos disponibles hasta t (253 precios
+  ajustados) y se reestiman μ̂ y σ̂. La ventana avanza una sesión por vez; no se usa información posterior a t.
+- **Pronóstico (Ec. 12):** P̂ = P_t · exp(μ̂ · H / 252), la media condicional del GBM. Ingenuo: P̂ = P_t.
+- **Métricas (Ec. 13):** RMSE en unidades del precio ajustado; MAPE en %. Solo objetivos observados y positivos.
+- **Prueba:** H = {h_r} sesión(es), m = {int(res_r['m'].min())} pares por acción, objetivos del
+  {res_r['Desde'].min():%Y-%m-%d} al {res_r['Hasta'].max():%Y-%m-%d}. Los 252 días son la ventana de calibración,
+  no el horizonte pronosticado.
+- **Banda P10–P90** (complemento): cuantiles del GBM a H sesiones con los mismos μ̂ y σ̂.
+""")

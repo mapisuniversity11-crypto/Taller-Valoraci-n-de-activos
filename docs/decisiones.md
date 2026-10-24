@@ -175,6 +175,55 @@ existe, el último precio negociado, y se indica. Cada descarga de la cadena se 
 **Por qué:** el Paso 9 prohíbe sustituir el bid/ask por datos inventados. Fuera del horario de bolsa
 Yahoo puede entregar bid/ask en cero.
 
+## D19 — VaR: cartera, ventanas y convenciones
+**Fecha:** 2026-10-24
+**Decisión:**
+- Cartera evaluada: **pesos iguales** (10 % por acción) hasta que exista la pestaña Asignación.
+- Estimación con la **ventana de calibración** (504 retornos previos al último año); el último año
+  (252 sesiones) se usa solo para evaluar: excepciones del VaR diario (ventana móvil de 252 retornos,
+  VaR normal) y desempeño fuera de muestra.
+- Histórico con bloques de h días **solapados**; cuantil empírico "higher"; ES incluye los empates.
+- Monte Carlo: 20.000 escenarios GBM conjuntos bajo P (μ total y covarianza de log-retornos, Cholesky),
+  sin rebalanceo dentro de h.
+- Fuera de muestra: compra el primer día de evaluación, costo de 0,10 % del monto (ajustable), sin rebalanceo.
+- Excepciones: semáforo de Basilea (0–4 verde, 5–9 amarilla, 10+ roja para 250 días al 99 %).
+- Estrés: los tres escenarios del instructivo; con pesos iguales hay empate de sectores y se toma el
+  primero de la cartera. "Veces el VaR" se compara con el VaR normal.
+**Por qué:** el Paso 11 pide estimar Σ_R con entrenamiento, y separar estimación y evaluación evita
+usar datos futuros. Los bloques solapados dan más observaciones; se aclara que no son independientes.
+
+## D20 — Pestañas concisas
+**Fecha:** 2026-10-24
+**Decisión:** cada pestaña muestra a la vista solo lo esencial (tarjetas, un gráfico principal y su
+lectura); tablas largas y notas de método van en desplegables ("Ver detalle").
+**Por qué:** la app debe ser fácil de entender para cualquiera, sin perder lo que exige el instructivo.
+
+## D21 — Asignación y estrategias
+**Fecha:** 2026-10-24
+**Decisión:**
+- Mínimo VaR: se minimiza wᵀΣ_R w (equivale a minimizar el VaR normal) con SLSQP de scipy, con
+  Σ_R de la ventana de calibración y media cero. Antes de optimizar se verifica la factibilidad de
+  los límites (2 %–20 % por acción, 35 % por sector) y después se verifican los resultados.
+- Inverso al VaR: w_i ∝ 1/v_i con el VaR individual normal; se aclara que ignora las correlaciones.
+- Corrección de concentración sectorial: sobre la cartera inversa al VaR, se recortan los sectores
+  que superan 35 % y el exceso se reparte entre las acciones con espacio, en proporción a su peso.
+- Orden de compra: acciones enteras redondeando hacia abajo al último cierre sin ajustar; se reporta
+  el efectivo sobrante y se recalculan pesos y VaR.
+- Rebalanceo mensual: el primer día hábil de cada mes del último año se recalcula el mínimo VaR con
+  los 504 retornos anteriores; costo sobre lo comprado y vendido.
+- Presupuesto de riesgo: valor por defecto V = USD 4.000 (antes 5.000). Con 5.000 el VaR de la cartera
+  de mínimo VaR (≈ USD 4.900) ya cabía en el presupuesto y la estrategia no mostraba ningún efecto.
+- La pestaña Riesgo permite elegir la cartera evaluada; por defecto, la de mínimo VaR.
+
+## D22 — Evaluación del GBM
+**Fecha:** 2026-10-24
+**Decisión:** rolling con ventana de 252 log-retornos hasta t, H = 1 por defecto (ajustable), sobre
+el último año (252 fechas de origen con objetivo observado). Se reportan RMSE y MAPE por acción y
+frente al pronóstico ingenuo. Como complemento (no lo pide el instructivo) se mide la cobertura de la
+banda P10–P90 del GBM.
+**Por qué:** a un día el GBM y el ingenuo dan casi lo mismo; la cobertura muestra en qué sí aporta
+el modelo (describir el rango de precios), lo que ayuda a interpretar el resultado.
+
 ---
 
 _Plantilla para nuevas decisiones:_

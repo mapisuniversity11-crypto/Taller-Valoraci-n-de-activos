@@ -62,9 +62,9 @@ docs/
 
 | Semana | Contenido | Estado |
 |---|---|---|
-| 1 | Datos y CRR | En curso |
-| 2 | GBM, contrato, rolling, VaR | Pendiente |
-| 3 | Asignación y demostración | Pendiente |
+| 1 | Datos y CRR | Lista |
+| 2 | GBM, contrato, rolling, VaR | Lista |
+| 3 | Asignación y demostración | Asignación lista; falta exportación CSV y demostración |
 
 ## Reproducibilidad
 
