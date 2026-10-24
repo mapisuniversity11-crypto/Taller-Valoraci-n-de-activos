@@ -35,7 +35,7 @@ N_EVALUACION: int = 252
 # --- Parámetros generales (Paso 3) -----------------------------------------
 D: int = 252                 # sesiones por año
 CAPITAL: float = 100_000.0   # USD
-TASA_LIBRE_RIESGO: float = 0.04   # r, decimal, continua anual (revisar al ejecutar)
+TASA_LIBRE_RIESGO: float = 0.04   # r manual de respaldo; por defecto la app usa ^IRX de Yahoo (D13)
 SEMILLA: int = 42
 
 # --- Riesgo (Paso 10) ------------------------------------------------------
@@ -51,6 +51,19 @@ MAX_SECTOR: float = 0.35
 N_TRAYECTORIAS_GBM: int = 5_000
 N_ESCENARIOS_VAR: int = 20_000
 DT: float = 1 / D
+
+# --- Estrategias y evaluación (Pasos 12 y 13) ------------------------------
+PRESUPUESTO_RIESGO: float = 5_000.0   # V, USD de VaR máximo permitido (ajustable)
+H_ROLLING: int = 1                    # sesiones de pronóstico del rolling
+
+# --- Árbol CRR (Paso 8) ----------------------------------------------------
+N_PASOS_CRR: int = 500
+
+# --- Interfaz ---------------------------------------------------------------
+MOSTRAR_INTRO: bool = True      # pantalla de bienvenida al abrir la app
+ESTILO_INTRO: str = "metal"     # "metal" (cintas de oro líquido) o "arbol" (árbol binomial)
+FUENTE_INTRO: str = "Michroma"  # fuente del título en el estilo "arbol"
+DURACION_INTRO: float = 6.0     # segundos
 
 # --- Control del CRR (Paso 8) ----------------------------------------------
 CONTROL_CRR = dict(S0=100.0, K=100.0, T=1.0, r=0.05, q=0.0, sigma=0.20)

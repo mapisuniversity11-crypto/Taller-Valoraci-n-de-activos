@@ -6,15 +6,19 @@
 - [x] Estructura del repositorio, README, bitácora de decisiones
 - [x] Elegir tickers y sectores (D3)
 - [x] Esqueleto de la app con entradas, pestañas y botón (Paso 1)
-- [ ] Subir a GitHub
+- [x] Subir a GitHub
+- [x] Paso 1 completo: qᵢ por acción, entradas del CRR, V y H (D6, D7)
+- [x] `datos.py`: descarga ajustada + sin ajustar, `end` exclusiva, metadatos y versiones
+- [x] `datos.py`: limpieza, sesiones comunes, reporte de calidad, respaldo/carga CSV
+- [x] `calibracion.py`: retornos, σ, μ total, a = μ − q, covarianza y correlación (n − 1)
+- [x] Pestaña Datos: calidad, precios normalizados, histogramas, correlaciones, parámetros
+- [x] Pruebas de datos y calibración (con datos simulados)
 
 ### Jueves 22
-- [ ] `datos.py`: descarga ajustada + sin ajustar, `end` exclusiva, metadatos y versiones
-- [ ] `datos.py`: limpieza, sesiones comunes, reporte de calidad, respaldo/carga CSV
-- [ ] `calibracion.py`: retornos, σ, μ total, a = μ − q, covarianza y correlación (n − 1)
+- [ ] **Probar la descarga real de Yahoo en el computador** y corregir lo que falle
+- [ ] Subir el respaldo `data/raw` al repositorio
 - [ ] `crr.py`: europea y americana, call y put, validación de pQ, T = 0
-- [ ] Pruebas: control CRR = 10,4506; divisor n − 1
-- [ ] Pestaña Datos: calidad, precios normalizados, histogramas, correlaciones, parámetros
+- [ ] Prueba: control CRR = 10,4506
 - [ ] Pestaña Opciones: árbol de 3 pasos y gráfico de convergencia
 
 ### Viernes 23 (mañana)

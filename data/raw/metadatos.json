@@ -1,0 +1,109 @@
+{
+  "fuente": "Yahoo Finance (yfinance)",
+  "consulta": "2026-10-23T21:01:33",
+  "inicio": "2022-10-23",
+  "ultimo_dia_solicitado": "2026-10-23",
+  "end_exclusivo_usado": "2026-10-24",
+  "tickers": [
+    "AAPL",
+    "MSFT",
+    "JPM",
+    "BAC",
+    "XOM",
+    "CVX",
+    "JNJ",
+    "PFE",
+    "KO",
+    "PG"
+  ],
+  "reintentos_por_accion": {},
+  "versiones": {
+    "python": "3.13.12",
+    "yfinance": "1.7.0",
+    "pandas": "3.0.6",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "streamlit": "1.66.1",
+    "plotly": "7.1.0"
+  },
+  "sectores_yahoo": {
+    "AAPL": "Technology",
+    "MSFT": "Technology",
+    "JPM": "Financial Services",
+    "BAC": "Financial Services",
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "JNJ": "Healthcare",
+    "PFE": "Healthcare",
+    "KO": "Consumer Defensive",
+    "PG": "Consumer Defensive"
+  },
+  "dividendos": {
+    "AAPL": {
+      "dividendos_12m": 1.06,
+      "precio": 347.7300109863281,
+      "fecha_precio": "2026-10-23",
+      "q": 0.003043705234288271
+    },
+    "MSFT": {
+      "dividendos_12m": 3.64,
+      "precio": 524.510009765625,
+      "fecha_precio": "2026-10-23",
+      "q": 0.0069158407093197274
+    },
+    "JPM": {
+      "dividendos_12m": 6.15,
+      "precio": 331.5799865722656,
+      "fecha_precio": "2026-10-23",
+      "q": 0.018377652617113827
+    },
+    "BAC": {
+      "dividendos_12m": 1.1600000000000001,
+      "precio": 50.560001373291016,
+      "fecha_precio": "2026-10-23",
+      "q": 0.02268380345586165
+    },
+    "XOM": {
+      "dividendos_12m": 4.12,
+      "precio": 183.2100067138672,
+      "fecha_precio": "2026-10-23",
+      "q": 0.022238730763854474
+    },
+    "CVX": {
+      "dividendos_12m": 7.050000000000001,
+      "precio": 233.2100067138672,
+      "fecha_precio": "2026-10-23",
+      "q": 0.029782334244868296
+    },
+    "JNJ": {
+      "dividendos_12m": 5.28,
+      "precio": 263.80999755859375,
+      "fecha_precio": "2026-10-23",
+      "q": 0.019816749246808558
+    },
+    "PFE": {
+      "dividendos_12m": 1.72,
+      "precio": 30.030000686645508,
+      "fecha_precio": "2026-10-23",
+      "q": 0.055695842104773664
+    },
+    "KO": {
+      "dividendos_12m": 2.1,
+      "precio": 92.70999908447266,
+      "fecha_precio": "2026-10-23",
+      "q": 0.022398547529707498
+    },
+    "PG": {
+      "dividendos_12m": 4.292,
+      "precio": 161.02000427246094,
+      "fecha_precio": "2026-10-23",
+      "q": 0.026306015912644705
+    }
+  },
+  "tasa_libre_riesgo": {
+    "irx_porcentaje": 4.0320000648498535,
+    "fecha": "2026-10-23",
+    "r": 0.039528358756767946,
+    "fuente": "Yahoo Finance ^IRX (T-bill 13 semanas)"
+  }
+}

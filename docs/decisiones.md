@@ -53,6 +53,79 @@ bid/ask utilizable. Las opciones sobre acciones de EE. UU. son de estilo **ameri
 evaluación); 3 años calendario dan aproximadamente 750, que se quedaría corto tras
 festivos y descartes. 4 años da margen.
 
+## D6 — Dividendos qᵢ por acción
+**Fecha:** 2026-10-21
+**Decisión:** la tasa de dividendos se ingresa por acción (columna `q` de la tabla), no como un único valor.
+**Por qué:** el Paso 3 define aᵢ = μᵢ − qᵢ con qᵢ propio de cada acción. Ver D12 para cómo se calcula.
+
+## D7 — Entradas del CRR en la entrega 1
+**Fecha:** 2026-10-21
+**Decisión:** S0, K, T, r, σ y q del árbol se ingresan manualmente, con los valores del caso de control por defecto.
+**Por qué:** en la semana 1 aún no se ha elegido el contrato (Pasos 5–6). Así el árbol se puede validar
+contra 10,4506 sin tocar nada. En la semana 2, K y T vendrán del contrato elegido, S0 del cierre
+sin ajustar, σ de la calibración y r de la entrada general.
+
+## D8 — Limpieza: sesiones comunes completas
+**Fecha:** 2026-10-21
+**Decisión:** una fecha se conserva solo si las 10 acciones tienen precio ajustado **y** sin ajustar
+válido (> 0). Los precios ≤ 0 se tratan como faltantes. Los duplicados de fecha se eliminan
+conservando la última observación. No se rellenan faltantes (ni con ceros ni con forward-fill).
+**Por qué:** el Paso 2.3 pide sesiones comunes completas y prohíbe inventar retornos cero. Un
+forward-fill crearía precisamente un retorno cero falso. Se exige también el precio sin ajustar
+porque se necesita como S0 en la misma fecha. Todas las fechas descartadas se reportan en la app.
+
+## D9 — Ventanas de calibración y evaluación
+**Fecha:** 2026-10-21
+**Decisión:** evaluación = últimos 252 retornos; calibración inicial = los 504 retornos
+inmediatamente anteriores. Si hay más de 756 retornos, los más antiguos no entran en estas
+ventanas (la app reporta cuántos), pero quedan disponibles para el rolling.
+Los parámetros, la covarianza y la correlación de la pestaña Datos se calculan con la
+ventana de calibración.
+**Por qué:** así lo define el Paso 2.4. Usar la ventana de calibración evita mirar datos
+del período de evaluación (no usar datos futuros), y el Paso 11 pide estimar Σ_R con entrenamiento.
+
+## D10 — Fuentes de datos y respaldo
+**Fecha:** 2026-10-21
+**Decisión:** la app ofrece tres orígenes: Yahoo Finance, respaldo del repositorio (`data/raw`)
+y CSV subido por el usuario (con procedencia obligatoria). Cada descarga de Yahoo se guarda
+cruda en `data/raw` junto con `metadatos.json` (fuente, hora de consulta, fechas, `end`
+exclusivo usado, sectores de Yahoo y versiones de bibliotecas).
+**Por qué:** el Paso 2.2 pide guardar datos y versiones; el Paso 2.3 pide poder cargar un CSV
+con procedencia si la descarga falla. El respaldo del repo hace la app reproducible el día de la
+sustentación aunque Yahoo no responda.
+
+## D11 — Sector: tabla editable vs. metadato de Yahoo
+**Fecha:** 2026-10-21
+**Decisión:** el sector que usa la app es el de la tabla editable de la barra lateral. El sector
+que reporta Yahoo se muestra al lado para comparar.
+**Por qué:** el metadato de Yahoo a veces falla o usa otra clasificación; el Paso 2.1 pide
+permitir la corrección manual.
+
+## D12 — Cálculo de qᵢ con dividendos reales
+**Fecha:** 2026-10-21
+**Decisión:** por defecto, qᵢ = ln(1 + D₁₂ / S), donde D₁₂ son los dividendos pagados por acción
+en los 365 días previos a la última fecha (Yahoo, `Ticker.dividends`) y S es el último cierre
+sin ajustar. Si falla, se usa el valor manual de la tabla.
+**Por qué:** con q = 0 se ignoraban dividendos reales del 2–6 % (KO, PG, XOM, CVX, PFE, JNJ).
+El Paso 3 pide documentar la aproximación del spot exdividendo.
+**Supuestos de la aproximación:** el dividendo de los próximos 12 meses será similar al de los
+últimos 12, y se trata como un pago continuo. Se usa el precio sin ajustar porque D₁₂ está
+expresado en dólares por acción reales (no ajustados por dividendos).
+**Alternativa descartada:** escribir rendimientos fijos tomados de páginas web; las fuentes no
+coincidían entre sí y quedaban desactualizados.
+
+## D13 — Tasa libre de riesgo r
+**Fecha:** 2026-10-21
+**Decisión:** por defecto, r = ln(1 + IRX/100), con IRX el rendimiento anual (en %) de la letra
+del Tesoro de EE. UU. a 13 semanas (`^IRX` en Yahoo), en la última fecha disponible. Si falla o el
+valor está fuera de 0–20 %, se usa el valor manual (4 %).
+**Por qué:** es la referencia estándar de tasa libre de riesgo en USD a corto plazo; se toma de la
+misma fuente y fecha que los precios; se convierte a tasa continua porque el CRR y el GBM la usan así.
+**Limitación:** ^IRX es una tasa a 3 meses; para opciones a 6 meses una tasa a ese plazo sería más
+precisa. La diferencia esperada es pequeña y se documentará en la semana 2.
+**Nota:** al buscar la tasa en la web, dos fuentes daban valores distintos para la misma semana
+(3,86 % y 4,27 %), otra razón para tomarla directamente del mercado al ejecutar.
+
 ---
 
 _Plantilla para nuevas decisiones:_

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantia — comparar fuentes</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500&family=Playfair+Display:wght@400;500&family=Gloock&family=Italiana&family=Michroma&family=Montserrat:wght@300&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #000; color: #9aa1ab; font-family: 'Montserrat', sans-serif; }
+  header { padding: 28px 24px 8px; letter-spacing: .2em; text-transform: uppercase; font-size: 13px; }
+  .opcion {
+    min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-top: 1px solid #1c1f25;
+    background: radial-gradient(ellipse at center, #111318 0%, #000 70%);
+    padding: 24px 16px;
+  }
+  .etiqueta { font-size: 12px; letter-spacing: .25em; text-transform: uppercase; margin-bottom: 14px; }
+  .titulo {
+    font-size: clamp(3.2rem, 12vw, 8.5rem); line-height: 1.05; letter-spacing: .02em;
+    background: linear-gradient(110deg, #5c626b 0%, #c9ced6 18%, #ffffff 26%, #8d939c 38%,
+                #e6e9ee 52%, #6e747d 66%, #f4f6f9 80%, #7d838c 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 18px rgba(200, 215, 235, .18));
+    animation: brillo 3.2s ease-in-out infinite;
+  }
+  .sub { margin-top: 14px; font-size: 13px; letter-spacing: .35em; text-transform: uppercase; text-align: center; }
+  @keyframes brillo { 0%,100% { background-position: 100% 0; } 50% { background-position: 0% 0; } }
+</style>
+</head>
+<body>
+<header>Quantia — opciones de fuente para la pantalla de inicio</header>
+
+<section class="opcion">
+  <div class="etiqueta">1 · Instrument Serif</div>
+  <div class="titulo" style="font-family:'Instrument Serif'">Quantia</div>
+  <div class="sub">Alta y estrecha, alto contraste — la más parecida a Voga</div>
+</section>
+
+<section class="opcion">
+  <div class="etiqueta">2 · Bodoni Moda</div>
+  <div class="titulo" style="font-family:'Bodoni Moda'; font-weight:500">Quantia</div>
+  <div class="sub">Didone clásica de revista de moda</div>
+</section>
+
+<section class="opcion">
+  <div class="etiqueta">3 · Playfair Display</div>
+  <div class="titulo" style="font-family:'Playfair Display'">Quantia</div>
+  <div class="sub">Elegante, muy legible</div>
+</section>
+
+<section class="opcion">
+  <div class="etiqueta">4 · Gloock</div>
+  <div class="titulo" style="font-family:'Gloock'">Quantia</div>
+  <div class="sub">Más gruesa y con más presencia</div>
+</section>
+
+<section class="opcion">
+  <div class="etiqueta">5 · Italiana</div>
+  <div class="titulo" style="font-family:'Italiana'">Quantia</div>
+  <div class="sub">Fina y minimalista</div>
+</section>
+
+<section class="opcion">
+  <div class="etiqueta">Actual · Michroma</div>
+  <div class="titulo" style="font-family:'Michroma'; letter-spacing:.08em; text-transform:uppercase">Quantia</div>
+  <div class="sub">La que tiene ahora la app (futurista)</div>
+</section>
+</body>
+</html>
