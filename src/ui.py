@@ -375,6 +375,7 @@ def css_portada_metal(duracion: float = 6.0) -> str:
     return f"""<style>
 /* Fondo negro mientras dura la portada (la app aún no se ha dibujado) */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{ background: #000 !important; }}
+[data-testid="stSkillsNudge"], [data-testid="stSkillsNudgeAnchor"] {{ display: none !important; }}
 .qp-telon {{
     position: fixed; inset: 0; z-index: 999999; background: #000;
     animation: qp-salida 0.9s ease-in {salida:.2f}s forwards;
@@ -563,7 +564,7 @@ def css_global() -> str:
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{ padding: .7rem 1rem !important; }}
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] p {{ letter-spacing: .12em; font-size: 12px !important; }}
 /* Avisos promocionales de Streamlit (la app no usa notificaciones propias) */
-[data-testid^="stToast"] {{ display: none !important; }}
+[data-testid^="stToast"], [data-testid="stSkillsNudge"], [data-testid="stSkillsNudgeAnchor"] {{ display: none !important; }}
 
 /* ---------- Pestañas ---------- */
 [data-testid="stTab"] p {{ text-transform: uppercase; letter-spacing: .16em; font-size: 13px !important; color: {TENUE}; }}

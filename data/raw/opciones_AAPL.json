@@ -1,0 +1,11 @@
+{
+  "ticker": "AAPL",
+  "fuente": "Yahoo Finance (yfinance) · Ticker.option_chain",
+  "consulta": "2026-10-24T09:39:02",
+  "vencimientos": [
+    "2026-11-20",
+    "2027-01-15",
+    "2027-04-16"
+  ],
+  "nota": "Las cotizaciones de Yahoo pueden ser diferidas."
+}

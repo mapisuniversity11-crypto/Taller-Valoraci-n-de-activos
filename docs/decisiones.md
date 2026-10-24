@@ -146,6 +146,35 @@ con la misma longitud de ventana. La ventana de calibración inicial se reserva 
 (Paso 13), donde sí importa no usar datos posteriores a cada fecha. Sumar la posición a la semilla
 evita que todas las acciones reciban los mismos números aleatorios, sin perder reproducibilidad.
 
+## D16 — Valoración del contrato real: CRR americano con σ histórica
+**Fecha:** 2026-10-24
+**Decisión:** el contrato de mercado se valora con el árbol CRR **americano** (las opciones sobre
+acciones de EE. UU. son americanas); el europeo se muestra como referencia. Se usa la volatilidad
+**histórica** calibrada (últimos 504 retornos), S0 = último cierre sin ajustar, r y q de la app,
+T = días calendario / 365 y N = máx(N del panel, 200).
+**Por qué:** comparar el mismo contrato con su estilo real. Usar σ histórica (y no la implícita) es
+lo que pide el taller; la diferencia con la volatilidad implícita sirve para explicar por qué el
+precio teórico difiere del mercado.
+
+## D17 — Selección de candidatos y sugerencia de contrato
+**Fecha:** 2026-10-24
+**Decisión:** se toman los tres vencimientos reales más cercanos a 30, 91 y 182 días. En cada uno, los
+strikes listados más cercanos a los cuantiles P25, P50 y P75 del GBM (Ec. 4, con T GBM = sesiones/252);
+si dos cuantiles caen en el mismo strike se usa el siguiente más cercano (9 candidatos en total). La app
+sugiere el contrato con **mayor interés abierto** entre los que tienen bid/ask válido y spread menor
+al 10 % (en empate, el más cercano a 3 meses); el usuario puede elegir cualquier otro.
+**Por qué:** la liquidez (interés abierto y spread) hace que el precio de mercado sea confiable para
+comparar. La regla es simple de explicar y la elección final queda en manos del usuario.
+
+## D18 — Cotizaciones no utilizables
+**Fecha:** 2026-10-24
+**Decisión:** solo se compara con el mercado si 0 < bid ≤ ask. Si no, la comparación queda
+"pendiente" y no se reemplaza por otro dato. La prima para las probabilidades usa el ask; si no
+existe, el último precio negociado, y se indica. Cada descarga de la cadena se guarda en
+`data/raw/opciones_<ticker>.csv` con su hora de consulta.
+**Por qué:** el Paso 9 prohíbe sustituir el bid/ask por datos inventados. Fuera del horario de bolsa
+Yahoo puede entregar bid/ask en cero.
+
 ---
 
 _Plantilla para nuevas decisiones:_
