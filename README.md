@@ -10,8 +10,8 @@ Universidad Externado de Colombia.
 
 | Nombre | Responsabilidad principal |
 |---|---|
-| María Paula Muñoz Malaver | Datos, calibración, integración de la app |
-| _(compañera)_ | Árbol binomial CRR, _(por definir)_ |
+| María Paula Muñoz Malaver | Datos, calibración, integración de la app; modelos browniano estándar, Merton y browniano fraccional; exportación CSV |
+| Danna Caballero | Árbol binomial CRR; modelos Ornstein-Uhlenbeck / Vasicek, herding y opciones reales |
 
 ## Cómo ejecutar
 
