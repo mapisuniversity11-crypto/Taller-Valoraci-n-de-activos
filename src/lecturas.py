@@ -336,3 +336,156 @@ def lectura_evaluacion_accion(fila, ticker: str) -> str:
             f"({_num(fila['MAPE GBM (%)'], 2)} % del precio); el ingenuo, por {_usd(fila['RMSE ingenuo'])} "
             f"({_num(fila['MAPE ingenuo (%)'], 2)} %). El precio real quedó dentro de la banda el "
             f"{_pct(fila['Cobertura P10–P90'], 0)} de las veces.")
+
+
+# ---------------------------------------------------------------------------
+# Modelos adicionales: browniano estándar, Merton y browniano fraccional
+# ---------------------------------------------------------------------------
+INTRO_BROWNIANO = (
+    "Es el modelo más simple de un precio que se mueve al azar: cada día la acción sube o baja una "
+    "<b>cantidad fija de dólares</b>, sin importar cuánto valga. Lo usamos como punto de partida para "
+    "responder una pregunta práctica: <b>¿por qué proyectamos con el GBM, que mide los movimientos en "
+    "porcentaje, y no con este modelo?</b>")
+
+INTRO_MERTON = (
+    "El GBM supone que el precio se mueve de forma suave, día a día. En la realidad hay <b>saltos</b>: un "
+    "reporte de resultados, una demanda o una noticia macro pueden mover la acción varios puntos en una "
+    "sola sesión. El modelo de Merton agrega esos saltos al GBM y responde: <b>¿cuántos saltos hay al año, "
+    "de qué tamaño, y cuánto más debería costar la opción por ese riesgo?</b>")
+
+INTRO_FRACCIONAL = (
+    "El GBM supone que lo que pasó ayer no dice nada sobre mañana: los retornos <b>no tienen memoria</b>. "
+    "El browniano fraccional permite que sí la tengan, y su exponente de Hurst <b>H</b> lo mide. "
+    "Pregunta financiera: <b>¿nuestras acciones siguen tendencias, tienden a devolverse, o se comportan "
+    "como supone el GBM?</b> Esto importa porque el VaR a varios días se calcula con la regla de la raíz "
+    "del tiempo, que solo es correcta si no hay memoria.")
+
+
+def variables_browniano(cal, p0: float) -> list[tuple[str, str, str, str, str]]:
+    return [
+        ("P₀", "Precio inicial", _usd(p0), "Último cierre: el punto de partida de todas las trayectorias.",
+         "Si sube, todo el abanico se desplaza hacia arriba, pero el ancho en dólares no cambia."),
+        ("m", "Tendencia en USD", f"{_usd(cal.m)}/año", "Cuántos dólares gana en promedio la acción por año.",
+         "Si sube, el centro del abanico crece en línea recta (no en curva, como en el GBM)."),
+        ("s", "Volatilidad en USD", f"{_usd(cal.s)}/año", "Cuántos dólares se mueve la acción en un año típico.",
+         "Si sube, el rango se ensancha; con s alto y horizonte largo aparecen precios negativos."),
+    ]
+
+
+def lectura_browniano(ticker: str, p_neg: dict, corr_usd: float, corr_pct: float, horizonte: str) -> str:
+    anios = max(p_neg)
+    texto = (f"En {horizonte}, el browniano estándar dibuja para <b>{ticker}</b> un abanico simétrico en dólares, mientras "
+             "el GBM es más amplio hacia arriba que hacia abajo, porque una acción puede subir sin límite pero no "
+             "caer por debajo de cero. ")
+    if p_neg[anios] < 1e-5:
+        texto += (f"Con estos parámetros, la probabilidad de un precio negativo es prácticamente cero incluso a {anios} "
+                  "años, pero el modelo la permite, y para una acción es imposible. ")
+    else:
+        texto += (f"Con estos parámetros, la probabilidad de terminar con un precio negativo es <b>{_pct(p_neg[1], 3)}</b> "
+                  f"a 1 año y <b>{_pct(p_neg[anios], 3)}</b> a {anios} años, algo imposible para una acción; el GBM "
+                  "nunca lo produce. ")
+    if corr_usd > 0.3 and abs(corr_pct) < corr_usd:
+        texto += (f"La evidencia más fuerte está en los datos: cuando {ticker} valía más, también se movía más dólares "
+                  f"por día (correlación {_num(corr_usd)}), mientras que su movimiento en porcentaje no dependía del "
+                  f"precio (correlación {_num(corr_pct)}). Los movimientos son <b>proporcionales</b> al precio, como "
+                  "supone el GBM.")
+    else:
+        texto += (f"En estos datos, el movimiento diario en dólares de {ticker} no crece claramente con el precio "
+                  f"(correlación {_num(corr_usd)}); aun así, el GBM sigue siendo preferible porque nunca da precios "
+                  "negativos.")
+    return texto
+
+
+def variables_merton(m, umbral_k: float) -> list[tuple[str, str, str, str, str]]:
+    return [
+        ("σ", "Volatilidad normal", _pct(m.sigma), "El movimiento de los días sin noticias fuertes.",
+         "Si sube, la opción se encarece en todos los strikes, como en el GBM."),
+        ("λ", "Saltos por año", _num(m.lam, 1),
+         f"Cuántos días al año la acción se movió más de {_num(umbral_k, 0)} veces lo normal.",
+         "Si sube, hay más probabilidad de un movimiento brusco antes del vencimiento y la opción vale más."),
+        ("μ_J", "Tamaño medio del salto", _pct(m.mu_j, 2),
+         "Si los saltos en promedio son hacia arriba (positivo) o hacia abajo (negativo).",
+         "Si es negativo, los saltos son sobre todo caídas: encarece las puts más que las calls."),
+        ("δ_J", "Variación del salto", _pct(m.delta_j, 2), "Qué tan distintos son los saltos entre sí.",
+         "Si sube, los saltos pueden ser muy grandes en cualquier dirección: encarece calls y puts."),
+    ]
+
+
+def lectura_saltos(ticker: str, m, n_dias: int) -> str:
+    sub = int((m.tamanos > 0).sum())
+    baj = len(m.tamanos) - sub
+    texto = (f"En los últimos {n_dias} días de negociación, <b>{ticker}</b> tuvo <b>{len(m.tamanos)} días de salto</b> "
+             f"({sub} hacia arriba y {baj} hacia abajo), unos <b>{_num(m.lam, 1)} por año</b>. ")
+    if len(m.tamanos):
+        mayor = m.tamanos.abs().idxmax()
+        texto += (f"El más fuerte fue el {mayor:%d/%m/%Y}, con un movimiento de {_pct(m.tamanos[mayor], 1)}. ")
+    texto += (f"Si se separan esos días, la volatilidad de los días normales es {_pct(m.sigma)}; con los saltos, la "
+              f"volatilidad total sube a {_pct(m.sigma_total)}. Esa diferencia es el riesgo que el GBM reparte de forma "
+              "suave y que en realidad llega de golpe.")
+    return texto
+
+
+def lectura_merton(v_bs: float, v_mer: float, cmp, p_salto: float, tipo: str, dias: int) -> str:
+    dif = v_mer - v_bs
+    texto = (f"Hay un <b>{_pct(p_salto, 0)}</b> de probabilidad de que ocurra al menos un salto en los {dias} días que "
+             f"faltan al vencimiento. Con saltos, la {tipo} europea vale <b>{_usd(v_mer)}</b> frente a {_usd(v_bs)} del "
+             f"modelo sin saltos: {'una prima adicional' if dif >= 0 else 'un descuento'} de {_usd(abs(dif))} "
+             "por acción. ")
+    if cmp and cmp.get("valida"):
+        medio = cmp["medio"]
+        if abs(v_mer - medio) < abs(v_bs - medio):
+            texto += (f"Merton queda <b>más cerca del precio del mercado</b> ({_usd(medio)}): parte de lo que el mercado "
+                      "cobra de más sobre el GBM es el riesgo de saltos.")
+        else:
+            texto += (f"El modelo sin saltos queda más cerca del precio del mercado ({_usd(medio)}): en este contrato, "
+                      "agregar saltos no mejora la valoración.")
+    return texto
+
+
+def variables_fraccional(h_sel: float, ticker: str) -> list[tuple[str, str, str, str, str]]:
+    return [
+        ("H", "Exponente de Hurst", _num(h_sel, 2) + f" ({ticker})",
+         "Mide la memoria de los retornos. Con H = 0,5 no hay memoria y el GBM es correcto.",
+         "Si sube por encima de 0,5, una subida tiende a seguir de otra (tendencia); si baja de 0,5, a una subida "
+         "le sigue una caída (reversión)."),
+        ("√h", "Regla de la raíz del tiempo", "VaR",
+         "Para pasar del riesgo de 1 día al de h días se multiplica por √h. Equivale a suponer H = 0,5.",
+         "Con H > 0,5 el riesgo a varios días crece más rápido que √h y el VaR queda corto; con H < 0,5, se "
+         "sobreestima."),
+    ]
+
+
+def lectura_hurst(tabla, h_var: int) -> str:
+    sin = tabla[tabla["Lectura"] == "Sin memoria"]["Ticker"].tolist()
+    ten = tabla[tabla["Lectura"] == "Tendencia"]["Ticker"].tolist()
+    rev = tabla[tabla["Lectura"] == "Reversión"]["Ticker"].tolist()
+    texto = f"<b>{len(sin)} de {len(tabla)}</b> acciones tienen un H compatible con una serie sin memoria"
+    texto += "." if not sin else f" ({_lista(sin)})." if len(sin) <= 4 else "."
+    if ten:
+        texto += f" {_lista(ten)} {'muestra' if len(ten) == 1 else 'muestran'} tendencia (H por encima de lo esperado)."
+    if rev:
+        texto += f" {_lista(rev)} {'muestra' if len(rev) == 1 else 'muestran'} algo de reversión (H por debajo)."
+    if len(sin) == len(tabla):
+        texto += (" Para toda la cartera, el supuesto del GBM de que los retornos no tienen memoria es razonable, y "
+                  f"escalar el VaR con √{h_var} es adecuado.")
+    elif len(sin) >= len(tabla) / 2:
+        texto += (" Para la mayoría de la cartera, el supuesto del GBM de que los retornos no tienen memoria es "
+                  f"razonable, y escalar el VaR con √{h_var} es adecuado.")
+    else:
+        texto += (" Varias acciones se apartan del supuesto del GBM: conviene revisar el escalamiento del VaR a "
+                  "varios días.")
+    return texto
+
+
+def lectura_escalamiento(ticker: str, h: float, fac: float, h_var: int, v, veredicto: str = "") -> str:
+    ult = v.iloc[-1]
+    texto = (f"A {int(ult['Sesiones'])} sesiones, la volatilidad real de <b>{ticker}</b> fue {_pct(ult['Real'])}, frente a "
+             f"{_pct(ult['Regla √m (GBM)'])} que predice la regla de la raíz del tiempo. ")
+    if fac > 1:
+        texto += f"Si el VaR a {h_var} días se escalara con H = {_num(h)}, sería un {_pct(fac - 1)} <b>mayor</b>."
+    else:
+        texto += f"Si el VaR a {h_var} días se escalara con H = {_num(h)}, sería un {_pct(1 - fac)} <b>menor</b>."
+    if veredicto == "Sin memoria":
+        texto += (" Pero esa diferencia está dentro de lo que produce el azar con esta cantidad de datos, así que no hay "
+                  "razón para cambiar la regla √h que usa la pestaña Riesgo.")
+    return texto

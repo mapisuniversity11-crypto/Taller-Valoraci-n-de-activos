@@ -224,6 +224,41 @@ banda P10–P90 del GBM.
 **Por qué:** a un día el GBM y el ingenuo dan casi lo mismo; la cobertura muestra en qué sí aporta
 el modelo (describir el rango de precios), lo que ayuda a interpretar el resultado.
 
+## D23 — Pestaña Modelos: cada modelo relaja un supuesto del GBM
+**Fecha:** 2026-11-08
+**Responsable:** María Paula Muñoz Malaver
+**Decisión:** Nueva pestaña "Modelos" con seis subpestañas. Tres completas: browniano estándar (movimientos en
+dólares fijos), Merton (saltos) y browniano fraccional (memoria, exponente de Hurst). Tres a cargo de la segunda
+integrante: Ornstein-Uhlenbeck/Vasicek, herding y opciones reales. Todas siguen la misma estructura: qué busca el
+modelo, variables con qué pasa si suben o bajan, aplicación a nuestro caso con gráfico y lectura, y ecuaciones en un
+desplegable.
+**Datos de cada modelo:**
+- Browniano estándar: la acción elegida, misma ventana de 504 retornos y mismos choques Z que la pestaña GBM; además,
+  la volatilidad por trimestre en toda la historia para ver si los movimientos son proporcionales al precio.
+- Merton: la acción de la opción. Saltos = días con |x − mediana| > k · 1,4826 · MAD (k = 3 por defecto, ajustable a
+  4 o 5). Se valora el mismo contrato de la pestaña Opciones con la fórmula de Merton (europea) y se compara con
+  Black-Scholes y con el mercado.
+- Fraccional: H por varianza agregada (m = 1…32) con toda la historia limpia; zona "sin memoria" = P5–P95 de H en 200
+  permutaciones de la serie. Se conecta con el escalamiento √h del VaR.
+**Por qué:** El profesor pidió estos modelos sin especificar la forma. Aplicarlos a los mismos datos mantiene un solo
+caso y responde por qué el GBM es (o no) adecuado. Ninguno cambia los resultados de los 13 pasos del instructivo.
+**Alternativas consideradas:** una pestaña por modelo (demasiadas pestañas); Ornstein-Uhlenbeck sobre precios de
+acciones (las acciones no revierten a un nivel; se usa la tasa y el diferencial XOM–CVX); H por R/S (más sesgado en
+muestras cortas).
+
+## D24 — Exportación de resultados en CSV
+**Fecha:** 2026-11-08
+**Responsable:** María Paula Muñoz Malaver
+**Decisión:** Un botón "Exportar resultados (CSV)" encima de las pestañas descarga un ZIP con un CSV por resultado
+(datos, calidad, parámetros, correlaciones, covarianza, proyecciones GBM P10/P50/P90, CRR, candidatos, contrato elegido,
+VaR/ES, excepciones, estrés, pesos, orden de compra, estrategias, presupuesto, rolling y modelos) más
+`00_resumen_parametros_y_semilla.csv` (fuente, fechas, ventanas, entradas, semillas, tasas y versiones) y un LEEME.
+**Por qué:** El instructivo exige "exportación de resultados CSV y resumen de parámetros/semilla". Un solo ZIP evita
+veinte botones y deja todo junto para reproducir la ejecución. Las partes que no se calculan (p. ej., sin cadena de
+opciones) se omiten en lugar de romper la exportación.
+**Alternativas consideradas:** un botón por tabla en cada pestaña (más desordenado); Excel con hojas (el instructivo
+pide CSV).
+
 ---
 
 _Plantilla para nuevas decisiones:_

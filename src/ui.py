@@ -156,7 +156,7 @@ def html_intro(titulo: str = "Quantia",
 
 # ---------------------------------------------------------------------------
 # Portada de metal líquido dorado (WebGL)
-# Shader adaptado del componente "ShaderMetal" (21st.dev): cintas de metal que
+# Shader adaptado del componente "Shader Metal" de jay sharma (@radiumcoders, 21st.dev, licencia MIT): cintas de metal que
 # reflejan una iluminación de estudio. Ver créditos en el README.
 # ---------------------------------------------------------------------------
 _VERT_METAL = """attribute vec2 a_position;
@@ -634,6 +634,22 @@ def css_global() -> str:
 .q-lectura .et {{ display: block; font-size: 10px; letter-spacing: .28em; text-transform: uppercase;
     color: {ORO}; margin-bottom: 4px; }}
 .q-lectura b {{ color: {ORO_CLARO}; font-weight: 600; }}
+.q-lectura.intro {{ background: transparent; border-color: {LINEA}; font-size: 15px; }}
+.q-vars {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 8px 0 12px; }}
+.q-var {{ border: 1px solid #2b261d; border-radius: 10px; padding: 12px 14px; background: rgba(0,0,0,.25); }}
+.q-var .sim {{ font-family: 'Cinzel', serif; font-size: 20px; color: {ORO_CLARO}; }}
+.q-var .nom {{ font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: {ORO}; margin-left: 8px; }}
+.q-var .que {{ font-size: 13px; color: #ddd5c4; line-height: 1.5; margin-top: 6px; }}
+.q-var .sube {{ font-size: 12px; color: {TENUE}; line-height: 1.5; margin-top: 6px; }}
+.q-var .val {{ float: right; font-size: 14px; color: {TEXTO}; font-variant-numeric: tabular-nums; }}
+/* ---------- Subpestañas (pestañas dentro de una pestaña) como píldoras ---------- */
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-list"] {{ gap: 8px; flex-wrap: wrap; }}
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab"] {{
+    border: 1px solid #3a3224; border-radius: 999px; padding: 6px 16px; height: auto; }}
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {{
+    background: rgba(217,181,106,.12); border-color: {ORO}; }}
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab-border"] {{ display: none; }}
 </style>"""
 
 
@@ -705,3 +721,18 @@ def html_checklist(items: list[tuple[bool, str]]) -> str:
         for ok, t in items
     )
     return f"<div>{filas}</div>"
+
+
+def html_intro(texto: str) -> str:
+    """Recuadro de introducción de un modelo: qué busca, en lenguaje de inversionista."""
+    return f'<div class="q-lectura intro"><span class="et">Qué busca el modelo</span>{texto}</div>'
+
+
+def html_variables(items: list[tuple[str, str, str, str, str]]) -> str:
+    """items: (símbolo, nombre, valor con nuestros datos, qué significa, qué pasa si sube)."""
+    tarjetas = "".join(
+        f'<div class="q-var"><span class="sim">{s}</span><span class="nom">{n}</span><span class="val">{v}</span>'
+        f'<div class="que">{q}</div><div class="sube">{u}</div></div>'
+        for s, n, v, q, u in items
+    )
+    return f'<div class="q-vars">{tarjetas}</div>'

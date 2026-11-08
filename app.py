@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src import asignacion, calibracion, config, crr, datos, gbm, lecturas, opciones, riesgo, rolling, ui
+from src import asignacion, calibracion, config, crr, datos, exportar, gbm, lecturas, modelos, opciones, riesgo, rolling, ui
 
 st.set_page_config(page_title="Quantia", layout="wide", initial_sidebar_state="collapsed")
 
@@ -315,7 +315,10 @@ st.markdown(ui.html_franja_resultados([
     f"{resumen['retornos_conjuntos']:,} retornos".replace(",", "."),
 ]), unsafe_allow_html=True)
 
-tabs = st.tabs(["Datos", "GBM", "Opciones", "Riesgo", "Asignación", "Evaluación"])
+# El botón de exportación se dibuja aquí, pero se llena al final, cuando ya están todos los resultados.
+zona_exportar = st.empty()
+
+tabs = st.tabs(["Datos", "GBM", "Opciones", "Riesgo", "Asignación", "Evaluación", "Modelos"])
 
 with tabs[0]:
     cal, ev = ventanas["calibracion"], ventanas["evaluacion"]
@@ -361,50 +364,45 @@ with tabs[0]:
     with g3, st.container(key="tarjeta_corr_lectura"):
         st.markdown(ui.titulo_tarjeta("¿Qué acciones se mueven juntas?"), unsafe_allow_html=True)
         st.markdown(ui.html_lectura(lecturas.lectura_correlaciones(res["corr"], sect)), unsafe_allow_html=True)
-        st.dataframe(lecturas.pares_correlacion(res["corr"], sect).style.format({"Correlación": "{:.2f}"}),
-                     hide_index=True, width="stretch")
         st.markdown('<div class="q-nota">La correlación va de −1 a 1: cerca de 1, las dos acciones suben y bajan '
                     'al mismo tiempo; cerca de 0, se mueven de forma independiente; negativa, tienden a moverse '
                     'en direcciones opuestas.</div>', unsafe_allow_html=True)
+        with st.expander("Ver los pares más y menos correlacionados"):
+            st.dataframe(lecturas.pares_correlacion(res["corr"], sect).style.format({"Correlación": "{:.2f}"}),
+                         hide_index=True, width="stretch")
 
-    with st.container(key="tarjeta_universo_res"):
-        st.markdown(ui.titulo_tarjeta("Universo y procedencia"), unsafe_allow_html=True)
-        sect_yahoo = meta.get("sectores_yahoo", {})
-        st.dataframe(
-            pd.DataFrame({
-                "Ticker": tickers,
-                "Sector usado": [res["sectores"][t] for t in tickers],
-                "Sector Yahoo": [sect_yahoo.get(t, "—") or "no disponible" for t in tickers],
-                "Fuente": meta.get("fuente", "—"),
-                "Fecha de consulta": str(meta.get("consulta", meta.get("cargado_en", "—"))).replace("T", " "),
-            }),
-            hide_index=True, width="stretch",
-        )
-        if "procedencia" in meta:
-            st.caption(f"Procedencia declarada: {meta['procedencia']}")
+    with st.container(key="tarjeta_param"):
+        st.markdown(ui.titulo_tarjeta("Riesgo frente a retorno · ventana de calibración"), unsafe_allow_html=True)
+        par = res["parametros"].reset_index()
+        par = par.rename(columns={par.columns[0]: "Ticker"})
+        par["Sector"] = par["Ticker"].map(sect)
+        fig_rr = px.scatter(par, x="σ anual", y="μ total anual", color="Sector", text="Ticker",
+                            color_discrete_map=ui.colores_sector([sect[t] for t in tickers]))
+        fig_rr.update_traces(marker=dict(size=14, line=dict(width=1, color="#070706")),
+                             textposition="top center", textfont=dict(color=ui.TEXTO, size=11))
+        fig_rr.update_xaxes(tickformat=".0%", title_text="Volatilidad anual σ (riesgo)")
+        fig_rr.update_yaxes(tickformat=".0%", title_text="Retorno total anual μ")
+        fig_rr.add_hline(y=0, line_color="#3a3224", line_width=1)
+        fig_rr.update_layout(legend=dict(orientation="h", y=1.1, x=0, title=""))
+        st.plotly_chart(ui.estilo_fig(fig_rr, 420), width="stretch", config=ui.PLOTLY_CONFIG)
+        st.markdown(ui.html_lectura(lecturas.lectura_riesgo_retorno(res["parametros"])), unsafe_allow_html=True)
+        with st.expander("Ver la tabla de parámetros calibrados"):
+            st.dataframe(
+                res["parametros"].style.format({
+                    "Media diaria x̄": "{:.5f}", "Desv. diaria s": "{:.5f}", "σ anual": "{:.2%}",
+                    "μ total anual": "{:.2%}", "q": "{:.2%}", "a = μ − q": "{:.2%}",
+                }),
+                width="stretch",
+            )
+            st.markdown('<div class="q-nota">σ = √252 · s (divisor n − 1);  μ total = 252 · x̄ + ½σ²;  '
+                        'a = μ total − q (spot exdividendo). Calibración con los 504 retornos previos a la ventana '
+                        'de evaluación.</div>', unsafe_allow_html=True)
+        with st.expander("Ver la covarianza diaria de retornos simples Σ_R (n − 1)"):
+            st.dataframe(res["cov_diaria"].style.format("{:.6f}"), width="stretch")
 
-    with st.container(key="tarjeta_calidad"):
-        st.markdown(ui.titulo_tarjeta("Calidad de los datos"), unsafe_allow_html=True)
-        st.write(
-            f"Período limpio: **{resumen['desde']}** a **{resumen['hasta']}** · "
-            f"{resumen['fechas_originales']} fechas originales. "
-            f"Calibración inicial: {len(cal) - 1} retornos ({cal.index[1].date()} a {cal.index[-1].date()}). "
-            f"Evaluación: {len(ev) - 1} retornos ({ev.index[1].date()} a {ev.index[-1].date()}). "
-            f"Retornos más antiguos no usados en estas ventanas: {ventanas['retornos_no_usados']}."
-        )
-        st.dataframe(limpio.calidad_por_ticker.style.format(
-            {"Primera fecha": "{:%Y-%m-%d}", "Última fecha": "{:%Y-%m-%d}"}), width="stretch")
-        if resumen["fechas_descartadas"]:
-            with st.expander(f"Ver las {resumen['sesiones_descartadas']} fechas descartadas"):
-                st.write(", ".join(resumen["fechas_descartadas"]))
-        st.markdown('<div class="q-nota">Se usan solo sesiones en las que las 10 acciones tienen precio válido '
-                    '(ajustado y sin ajustar). Los faltantes no se rellenan: no se inventan retornos cero.</div>',
-                    unsafe_allow_html=True)
-
+    x_cal = calibracion.log_retornos(cal)
     with st.container(key="tarjeta_hist"):
-        st.markdown(ui.titulo_tarjeta("¿Cuánto se mueve cada acción en un día? · ventana de calibración"),
-                    unsafe_allow_html=True)
-        x_cal = calibracion.log_retornos(cal)
+        st.markdown(ui.titulo_tarjeta("¿Cuánto se mueve cada acción en un día?"), unsafe_allow_html=True)
         largo = x_cal.melt(var_name="Ticker", value_name="Log-retorno")
         largo["Sector"] = largo["Ticker"].map(sect)
         colores = ui.colores_sector([sect[t] for t in tickers])
@@ -414,12 +412,11 @@ with tabs[0]:
         fig_b.update_yaxes(tickformat=".0%", title_text="Log-retorno diario")
         fig_b.update_xaxes(title_text="")
         fig_b.update_layout(legend=dict(orientation="h", y=1.08, x=0, title=""), boxmode="overlay")
-        st.plotly_chart(ui.estilo_fig(fig_b, 400), width="stretch", config=ui.PLOTLY_CONFIG)
+        st.plotly_chart(ui.estilo_fig(fig_b, 380), width="stretch", config=ui.PLOTLY_CONFIG)
         st.markdown(ui.html_lectura(lecturas.lectura_dispersion(x_cal)), unsafe_allow_html=True)
 
     with st.container(key="tarjeta_hist_detalle"):
-        st.markdown(ui.titulo_tarjeta("Distribución detallada frente a la curva normal del GBM"),
-                    unsafe_allow_html=True)
+        st.markdown(ui.titulo_tarjeta("¿Se cumple la curva normal que supone el GBM?"), unsafe_allow_html=True)
         h1, h2 = st.columns([1.3, 1], gap="medium")
         with h1:
             elegido = st.selectbox("Acción", tickers, key="hist_ticker")
@@ -435,70 +432,27 @@ with tabs[0]:
             fig_d.update_xaxes(tickformat=".0%", title_text="Log-retorno diario")
             fig_d.update_yaxes(title_text="Densidad")
             fig_d.update_layout(legend=dict(orientation="h", y=1.1, x=0, title=""), bargap=0.02)
-            st.plotly_chart(ui.estilo_fig(fig_d, 360), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.plotly_chart(ui.estilo_fig(fig_d, 340), width="stretch", config=ui.PLOTLY_CONFIG)
         with h2:
             st.markdown(ui.html_lectura(lecturas.lectura_histograma(serie, elegido)), unsafe_allow_html=True)
-            st.markdown('<div class="q-nota">El GBM supone que los log-retornos siguen una curva normal (línea '
-                        'punteada). Si las barras se salen de la curva en los extremos, hay más días de '
-                        'movimientos fuertes de los que el modelo espera.</div>', unsafe_allow_html=True)
-        st.dataframe(
-            lecturas.resumen_distribucion(x_cal).style.format({
-                "Mejor día": "{:.2%}", "Peor día": "{:.2%}", "Esperados si fuera normal": "{:.1f}",
-            }),
-            width="stretch",
-        )
+            st.markdown('<div class="q-nota">La línea punteada es la curva normal que supone el GBM. Si las barras se '
+                        'salen de la curva en los extremos, hay más días de movimientos fuertes de los que el modelo '
+                        'espera.</div>', unsafe_allow_html=True)
+        with st.expander("Ver mejor y peor día de cada acción"):
+            st.dataframe(
+                lecturas.resumen_distribucion(x_cal).style.format({
+                    "Mejor día": "{:.2%}", "Peor día": "{:.2%}", "Esperados si fuera normal": "{:.1f}",
+                }),
+                width="stretch",
+            )
 
-    with st.container(key="tarjeta_q_r"):
-        st.markdown(ui.titulo_tarjeta("Dividendos q y tasa libre de riesgo r"), unsafe_allow_html=True)
-        divs = meta.get("dividendos", {})
-        st.dataframe(
-            pd.DataFrame({
-                "Ticker": tickers,
-                "Dividendos 12 meses (USD)": [divs.get(t, {}).get("dividendos_12m") for t in tickers],
-                "Precio sin ajustar (USD)": [divs.get(t, {}).get("precio") for t in tickers],
-                "q continua": [res["q"][t] for t in tickers],
-                "Fuente de q": [res["fuente_q"][t] for t in tickers],
-            }).style.format({
-                "Dividendos 12 meses (USD)": "{:.2f}", "Precio sin ajustar (USD)": "{:.2f}", "q continua": "{:.2%}",
-            }, na_rep="—"),
-            hide_index=True, width="stretch",
-        )
-        st.write(f"**r continua usada: {res['r']:.2%}**  (fuente: {res['fuente_r']})")
-        st.markdown('<div class="q-nota">q = ln(1 + D₁₂/S), con D₁₂ los dividendos pagados en los 365 días previos '
-                    'a la última fecha y S el último cierre sin ajustar. r = ln(1 + IRX/100), con IRX el rendimiento '
-                    'anual de la letra del Tesoro a 13 semanas. Suponen que el dividendo de los próximos 12 meses será '
-                    'similar al de los últimos 12 y que se reparte de forma continua.</div>', unsafe_allow_html=True)
-
-    with st.container(key="tarjeta_param"):
-        st.markdown(ui.titulo_tarjeta("Parámetros calibrados · riesgo frente a retorno"), unsafe_allow_html=True)
-        par = res["parametros"].reset_index().rename(columns={"index": "Ticker"})
-        par = par.rename(columns={par.columns[0]: "Ticker"})
-        par["Sector"] = par["Ticker"].map(sect)
-        fig_rr = px.scatter(par, x="σ anual", y="μ total anual", color="Sector", text="Ticker",
-                            color_discrete_map=ui.colores_sector([sect[t] for t in tickers]))
-        fig_rr.update_traces(marker=dict(size=14, line=dict(width=1, color="#070706")),
-                             textposition="top center", textfont=dict(color=ui.TEXTO, size=11))
-        fig_rr.update_xaxes(tickformat=".0%", title_text="Volatilidad anual σ (riesgo)")
-        fig_rr.update_yaxes(tickformat=".0%", title_text="Retorno total anual μ")
-        fig_rr.add_hline(y=0, line_color="#3a3224", line_width=1)
-        fig_rr.update_layout(legend=dict(orientation="h", y=1.1, x=0, title=""))
-        st.plotly_chart(ui.estilo_fig(fig_rr, 420), width="stretch", config=ui.PLOTLY_CONFIG)
-        st.markdown(ui.html_lectura(lecturas.lectura_riesgo_retorno(res["parametros"])), unsafe_allow_html=True)
-        st.dataframe(
-            res["parametros"].style.format({
-                "Media diaria x̄": "{:.5f}", "Desv. diaria s": "{:.5f}", "σ anual": "{:.2%}",
-                "μ total anual": "{:.2%}", "q": "{:.2%}", "a = μ − q": "{:.2%}",
-            }),
-            width="stretch",
-        )
-        st.markdown('<div class="q-nota">σ = √252 · s (divisor n − 1);  μ total = 252 · x̄ + ½σ²;  '
-                    'a = μ total − q (spot exdividendo). Calibración con los 504 retornos previos a la ventana '
-                    'de evaluación.</div>', unsafe_allow_html=True)
-        with st.expander("Covarianza diaria de retornos simples Σ_R (n − 1)"):
-            st.dataframe(res["cov_diaria"].style.format("{:.6f}"), width="stretch")
-
-    with st.container(key="tarjeta_descargas"):
-        st.markdown(ui.titulo_tarjeta("Descargas y versiones"), unsafe_allow_html=True)
+    with st.container(key="tarjeta_fuentes"):
+        st.markdown(ui.titulo_tarjeta("Datos, fuentes y descargas"), unsafe_allow_html=True)
+        consulta_txt = str(meta.get("consulta", meta.get("cargado_en", "—"))).replace("T", " ")
+        st.markdown(f'<div class="q-nota">Fuente: {meta.get("fuente", "—")} · consulta: {consulta_txt} · período '
+                    f'limpio: {resumen["desde"]} a {resumen["hasta"]} · {resumen["fechas_originales"]} fechas originales, '
+                    f'{resumen["sesiones_descartadas"]} descartadas. r continua usada: {res["r"]:.2%} '
+                    f'({res["fuente_r"]}).</div>', unsafe_allow_html=True)
         d1, d2, d3 = st.columns(3)
         d1.download_button("Precios ajustados (CSV)", datos.a_csv_bytes(limpio.ajustados),
                            "precios_ajustados_limpios.csv", width="stretch")
@@ -506,7 +460,56 @@ with tabs[0]:
                            "precios_sin_ajustar_limpios.csv", width="stretch")
         d3.download_button("Parámetros (CSV)", datos.a_csv_bytes(res["parametros"]),
                            "parametros_calibracion.csv", width="stretch")
-        with st.expander("Metadatos de la descarga y versiones de bibliotecas"):
+
+        with st.expander("Ver calidad de los datos"):
+            st.write(
+                f"Calibración inicial: {len(cal) - 1} retornos ({cal.index[1].date()} a {cal.index[-1].date()}). "
+                f"Evaluación: {len(ev) - 1} retornos ({ev.index[1].date()} a {ev.index[-1].date()}). "
+                f"Retornos más antiguos no usados en estas ventanas: {ventanas['retornos_no_usados']}."
+            )
+            st.dataframe(limpio.calidad_por_ticker.style.format(
+                {"Primera fecha": "{:%Y-%m-%d}", "Última fecha": "{:%Y-%m-%d}"}), width="stretch")
+            if resumen["fechas_descartadas"]:
+                st.write("Fechas descartadas: " + ", ".join(resumen["fechas_descartadas"]))
+            st.markdown('<div class="q-nota">Se usan solo sesiones en las que las 10 acciones tienen precio válido '
+                        '(ajustado y sin ajustar). Los faltantes no se rellenan: no se inventan retornos cero.</div>',
+                        unsafe_allow_html=True)
+
+        with st.expander("Ver universo y procedencia"):
+            sect_yahoo = meta.get("sectores_yahoo", {})
+            st.dataframe(
+                pd.DataFrame({
+                    "Ticker": tickers,
+                    "Sector usado": [res["sectores"][t] for t in tickers],
+                    "Sector Yahoo": [sect_yahoo.get(t, "—") or "no disponible" for t in tickers],
+                    "Fuente": meta.get("fuente", "—"),
+                    "Fecha de consulta": consulta_txt,
+                }),
+                hide_index=True, width="stretch",
+            )
+            if "procedencia" in meta:
+                st.caption(f"Procedencia declarada: {meta['procedencia']}")
+
+        with st.expander("Ver dividendos q y tasa libre de riesgo r"):
+            divs = meta.get("dividendos", {})
+            st.dataframe(
+                pd.DataFrame({
+                    "Ticker": tickers,
+                    "Dividendos 12 meses (USD)": [divs.get(t, {}).get("dividendos_12m") for t in tickers],
+                    "Precio sin ajustar (USD)": [divs.get(t, {}).get("precio") for t in tickers],
+                    "q continua": [res["q"][t] for t in tickers],
+                    "Fuente de q": [res["fuente_q"][t] for t in tickers],
+                }).style.format({
+                    "Dividendos 12 meses (USD)": "{:.2f}", "Precio sin ajustar (USD)": "{:.2f}", "q continua": "{:.2%}",
+                }, na_rep="—"),
+                hide_index=True, width="stretch",
+            )
+            st.markdown('<div class="q-nota">q = ln(1 + D₁₂/S), con D₁₂ los dividendos pagados en los 365 días previos '
+                        'a la última fecha y S el último cierre sin ajustar. r = ln(1 + IRX/100), con IRX el rendimiento '
+                        'anual de la letra del Tesoro a 13 semanas. Suponen que el dividendo de los próximos 12 meses será '
+                        'similar al de los últimos 12 y que se reparte de forma continua.</div>', unsafe_allow_html=True)
+
+        with st.expander("Ver metadatos de la descarga y versiones de bibliotecas"):
             st.json(meta)
 
 # ---------------------------------------------------------------------------
@@ -619,10 +622,9 @@ with tabs[2]:
     o = opcion
     with st.container(key="tarjeta_crr"):
         st.markdown(ui.titulo_tarjeta("Calculadora · árbol binomial CRR"), unsafe_allow_html=True)
-        st.markdown(f'<div class="q-nota">Usa los valores del panel de entradas (sección Opción): S0 = {o["s0"]:.2f}, '
-                    f'K = {o["k"]:.2f}, T = {o["t"]:.2f} años, r = {o["r"]:.2%}, q = {o["q"]:.2%}, σ = {o["sigma"]:.2%}, '
-                    f'N = {int(o["n"])} pasos, {o["tipo"]}. Por defecto es el caso de control del instructivo.</div>',
-                    unsafe_allow_html=True)
+        st.markdown(f'<div class="q-nota">S0 = {o["s0"]:.2f} · K = {o["k"]:.2f} · T = {o["t"]:.2f} años · '
+                    f'r = {o["r"]:.2%} · q = {o["q"]:.2%} · σ = {o["sigma"]:.2%} · N = {int(o["n"])} · {o["tipo"]} '
+                    '(se cambian en el panel de entradas, sección Opción).</div>', unsafe_allow_html=True)
         try:
             v_eu = crr.precio_crr(o["s0"], o["k"], o["t"], o["r"], o["q"], o["sigma"], int(o["n"]), o["tipo"], "europea")
             v_am = crr.precio_crr(o["s0"], o["k"], o["t"], o["r"], o["q"], o["sigma"], int(o["n"]), o["tipo"], "americana")
@@ -712,6 +714,7 @@ with tabs[2]:
     # ---------- Parte 2: contratos reales (Pasos 5, 6 y 7) ----------
     t_op = res.get("ticker_opcion", config.TICKER_OPCION)
     cadena, meta_cad = res.get("cadena"), res.get("meta_cadena") or {}
+    contrato_mod = None      # contrato elegido, para valorarlo también con Merton en la pestaña Modelos
     if cadena is None:
         with st.container(key="tarjeta_sin_cadena"):
             st.markdown(ui.titulo_tarjeta(f"Contratos de mercado de {t_op}"), unsafe_allow_html=True)
@@ -727,14 +730,22 @@ with tabs[2]:
 
         with st.container(key="tarjeta_candidatos"):
             st.markdown(ui.titulo_tarjeta(f"Contratos candidatos · {tipo_op}s de {t_op}"), unsafe_allow_html=True)
-            st.markdown(f'<div class="q-nota">Consulta: {str(meta_cad.get("consulta", "—")).replace("T", " ")} · '
-                        f'{meta_cad.get("fuente", "")} (las cotizaciones pueden ser diferidas). Precio de {t_op}: '
-                        f'{lecturas._usd(s0_op)} (cierre sin ajustar). Para cada vencimiento se eligen los strikes '
-                        'reales más cercanos a los precios proyectados P25, P50 y P75 del GBM (Ec. 4).</div>',
-                        unsafe_allow_html=True)
             if cands.empty:
                 st.warning("No se encontraron candidatos en la cadena descargada.")
             else:
+                n_venc = cands["Vencimiento"].nunique()
+                n_ok = int(cands["Cotización válida"].sum())
+                st.markdown(ui.html_lectura(
+                    f"Se revisaron <b>{len(cands)} contratos reales</b> en {n_venc} vencimientos: para cada uno, los strikes "
+                    f"más cercanos a los precios que el GBM proyecta como escenario bajo (P25), central (P50) y alto (P75). "
+                    f"{n_ok} tienen cotización utilizable. {t_op} cotiza hoy a {lecturas._usd(s0_op)}."),
+                    unsafe_allow_html=True)
+            if not cands.empty:
+              with st.expander("Ver la tabla de contratos candidatos"):
+                st.markdown(f'<div class="q-nota">Consulta: {str(meta_cad.get("consulta", "—")).replace("T", " ")} · '
+                            f'{meta_cad.get("fuente", "")} (las cotizaciones pueden ser diferidas). Precio de {t_op}: '
+                            f'cierre sin ajustar. Strikes elegidos según los cuantiles P25, P50 y P75 del GBM (Ec. 4).</div>',
+                            unsafe_allow_html=True)
                 vista = cands[["Vencimiento", "Días", "Cuantil", "Precio proyectado", "Strike", "Bid", "Ask",
                                "Spread %", "Volumen", "Interés abierto", "Vol. implícita"]]
                 st.dataframe(vista.style.format({
@@ -802,10 +813,11 @@ with tabs[2]:
                                 unsafe_allow_html=True)
                     sens = opciones.sensibilidad(s0_op, a_op, sig_op, c_el["Strike"], c_el["T GBM"], c_el["T valoración"],
                                                  r_op, tipo_op, float(prima), semilla=semilla_base)
-                    st.dataframe(sens.style.format({"Drift a": "{:.1%}", "Volatilidad σ": "{:.1%}",
-                                                    "P(ejercicio)": "{:.0%}", "P(beneficio)": "{:.0%}"}),
-                                 hide_index=True, width="stretch")
                     st.markdown(ui.html_lectura(lecturas.lectura_sensibilidad(sens)), unsafe_allow_html=True)
+                    with st.expander("Ver la tabla de sensibilidad"):
+                        st.dataframe(sens.style.format({"Drift a": "{:.1%}", "Volatilidad σ": "{:.1%}",
+                                                        "P(ejercicio)": "{:.0%}", "P(beneficio)": "{:.0%}"}),
+                                     hide_index=True, width="stretch")
 
             # ---------- Parte 3: teórico vs. mercado (Pasos 7 y 9) ----------
             with st.container(key="tarjeta_mercado"):
@@ -816,6 +828,9 @@ with tabs[2]:
                 v_eu_m = crr.precio_crr(s0_op, c_el["Strike"], c_el["T valoración"], r_op, q_op, sig_op, n_val,
                                         tipo_op, "europea")
                 cmp = opciones.comparar(v_am_m, c_el["Bid"], c_el["Ask"])
+                contrato_mod = dict(k=float(c_el["Strike"]), t=float(c_el["T valoración"]), dias=int(c_el["Días"]),
+                                    venc=str(c_el["Vencimiento"]), cmp=cmp, v_am=v_am_m, v_eu=v_eu_m,
+                                    bid=float(c_el["Bid"]), ask=float(c_el["Ask"]))
                 st.markdown(ui.html_kpis([
                     ("CRR americana", lecturas._usd(v_am_m), "estilo del contrato real"),
                     ("CRR europea", lecturas._usd(v_eu_m), "referencia"),
@@ -844,8 +859,8 @@ with tabs[2]:
                     st.markdown(ui.html_lectura(lecturas.lectura_mercado(cmp, v_am_m, c_el["Bid"], c_el["Ask"],
                                                                         c_el["Vol. implícita"], sig_op)),
                                 unsafe_allow_html=True)
-                st.markdown('<div class="q-titulo" style="margin-top:8px">Ficha del contrato</div>', unsafe_allow_html=True)
-                st.dataframe(pd.DataFrame([{
+                with st.expander("Ver la ficha del contrato y el método"):
+                  st.dataframe(pd.DataFrame([{
                     "Identificador": c_el["Contrato"], "Tipo": tipo_op, "Strike": c_el["Strike"],
                     "Vencimiento": c_el["Vencimiento"], "Estilo": "americano", "Spot S0": s0_op,
                     "Bid": c_el["Bid"], "Ask": c_el["Ask"], "Volumen": c_el["Volumen"],
@@ -854,7 +869,7 @@ with tabs[2]:
                 }]).style.format({"Strike": "{:.2f}", "Spot S0": "{:.2f}", "Bid": "{:.2f}", "Ask": "{:.2f}",
                                   "Volumen": "{:,.0f}", "Interés abierto": "{:,.0f}"}, na_rep="—"),
                     hide_index=True, width="stretch")
-                st.markdown(f'<div class="q-nota">Valoración bajo la medida neutral al riesgo Q (drift r − q): '
+                  st.markdown(f'<div class="q-nota">Valoración bajo la medida neutral al riesgo Q (drift r − q): '
                             f'r = {r_op:.2%}, q = {q_op:.2%}, σ histórica = {sig_op:.2%}, T = {c_el["Días"]} días / 365 = '
                             f'{c_el["T valoración"]:.4f} años, N = {n_val} pasos. Las probabilidades de arriba usan la '
                             f'medida física P (drift a = {a_op:.2%}) y {c_el["Sesiones"]} sesiones '
@@ -1167,3 +1182,434 @@ with tabs[5]:
   no el horizonte pronosticado.
 - **Banda P10–P90** (complemento): cuantiles del GBM a H sesiones con los mismos μ̂ y σ̂.
 """)
+
+# ---------------------------------------------------------------------------
+# Modelos adicionales: cada uno relaja un supuesto del GBM y se aplica al caso.
+# Browniano estándar, Merton y fraccional están completos; los otros tres quedan
+# marcados para la segunda integrante (ver docs/guia_modelos.md).
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def _tabla_hurst(x: pd.DataFrame, semilla: int) -> pd.DataFrame:
+    return modelos.tabla_hurst(x, semilla)
+
+
+with tabs[6]:
+    st.markdown('<div class="q-nota" style="font-size:13px;margin-bottom:10px">El GBM descansa en supuestos: movimientos '
+                'proporcionales al precio, sin saltos y sin memoria. Cada modelo de esta pestaña cambia uno de esos '
+                'supuestos y lo prueba con los datos de nuestra cartera.</div>', unsafe_allow_html=True)
+    sub = st.tabs(["Browniano estándar", "Merton · saltos", "Browniano fraccional",
+                   "Ornstein-Uhlenbeck · Vasicek", "Herding · manada", "Opciones reales"])
+
+    # ---------- Browniano estándar ----------
+    with sub[0]:
+        b1, b2, _ = st.columns([1, 1, 2])
+        with b1:
+            t_b = st.selectbox("Acción", tickers, key="bro_ticker",
+                               index=tickers.index(config.TICKER_OPCION) if config.TICKER_OPCION in tickers else 0)
+        with b2:
+            hor_b = st.selectbox("Horizonte", list(gbm.HORIZONTES), index=3, key="bro_horizonte")
+        ses_b = gbm.HORIZONTES[hor_b]
+        p0_b = float(s0_hoy[t_b])
+        cal_b = modelos.calibrar_browniano(precios_hoy[t_b], config.D)
+        st.markdown(ui.html_intro(lecturas.INTRO_BROWNIANO), unsafe_allow_html=True)
+        st.markdown(ui.html_variables(lecturas.variables_browniano(cal_b, p0_b)), unsafe_allow_html=True)
+
+        sem_b = semilla_base + tickers.index(t_b)          # mismos choques que la pestaña GBM
+        tr_b = modelos.simular_browniano(p0_b, cal_b.m, cal_b.s, ses_b, config.N_TRAYECTORIAS_GBM, sem_b)
+        a_b, sig_b = float(par_hoy.loc[t_b, "a = μ − q"]), float(par_hoy.loc[t_b, "σ anual"])
+        tr_g = gbm.simular_gbm(p0_b, a_b, sig_b, ses_b, config.N_TRAYECTORIAS_GBM, sem_b)
+        pb, pg = np.percentile(tr_b, [10, 50, 90], axis=0), np.percentile(tr_g, [10, 50, 90], axis=0)
+        p_neg = {1: modelos.prob_negativo(p0_b, cal_b.m, cal_b.s, 1), 10: modelos.prob_negativo(p0_b, cal_b.m, cal_b.s, 10)}
+
+        with st.container(key="tarjeta_bro_abanico"):
+            st.markdown(ui.titulo_tarjeta(f"Browniano estándar frente a GBM · {t_b} · {hor_b}"), unsafe_allow_html=True)
+            st.markdown(ui.html_kpis([
+                ("Rango · browniano estándar", f"{pb[0, -1]:,.0f} – {pb[2, -1]:,.0f}".replace(",", "."), "P10–P90 en USD"),
+                ("Rango · GBM", f"{pg[0, -1]:,.0f} – {pg[2, -1]:,.0f}".replace(",", "."), "P10–P90 en USD"),
+                ("Precio negativo a 10 años", lecturas._pct(p_neg[10], 3), "browniano estándar · en el GBM es 0 %"),
+            ]), unsafe_allow_html=True)
+            fechas_b = pd.bdate_range(limpio.sin_ajustar.index[-1], periods=ses_b + 1)
+            fig_bb = go.Figure()
+            for p_, nom, color, relleno in ((pg, "GBM", ui.ORO_CLARO, "rgba(217,181,106,.16)"),
+                                            (pb, "Browniano estándar", ui.PALETA[3], "rgba(138,160,184,.16)")):
+                fig_bb.add_trace(go.Scatter(x=fechas_b, y=p_[2], mode="lines", line=dict(width=0), showlegend=False,
+                                            hoverinfo="skip"))
+                fig_bb.add_trace(go.Scatter(x=fechas_b, y=p_[0], mode="lines", line=dict(width=0), fill="tonexty",
+                                            fillcolor=relleno, name=f"Rango P10–P90 · {nom}", hoverinfo="skip"))
+                fig_bb.add_trace(go.Scatter(x=fechas_b, y=p_[1], mode="lines", name=f"Mediana · {nom}",
+                                            line=dict(color=color, width=2)))
+            fig_bb.update_yaxes(title_text="Precio (USD)")
+            fig_bb.update_layout(legend=dict(orientation="h", y=1.15, x=0), hovermode="x unified")
+            st.plotly_chart(ui.estilo_fig(fig_bb, 380), width="stretch", config=ui.PLOTLY_CONFIG)
+
+        niv = modelos.volatilidad_por_nivel(limpio.ajustados[t_b])
+        c_usd = float(niv["Precio medio"].corr(niv["Movimiento diario USD"]))
+        c_pct = float(niv["Precio medio"].corr(niv["Movimiento diario %"]))
+        with st.container(key="tarjeta_bro_nivel"):
+            st.markdown(ui.titulo_tarjeta("¿Los movimientos son en dólares fijos o en porcentaje?"), unsafe_allow_html=True)
+            fig_nv = px.scatter(niv, x="Precio medio", y="Movimiento diario USD", trendline=None,
+                                color_discrete_sequence=[ui.ORO_CLARO],
+                                hover_data={"Desde": "|%Y-%m-%d", "Movimiento diario %": ":.2%"})
+            fig_nv.update_traces(marker=dict(size=12, line=dict(width=1, color="#070706")))
+            if len(niv) > 2:
+                coef = np.polyfit(niv["Precio medio"], niv["Movimiento diario USD"], 1)
+                xs_nv = np.linspace(niv["Precio medio"].min(), niv["Precio medio"].max(), 50)
+                fig_nv.add_scatter(x=xs_nv, y=np.polyval(coef, xs_nv), mode="lines", name="Tendencia",
+                                   line=dict(color=ui.TENUE, dash="dot"))
+            fig_nv.update_xaxes(title_text=f"Precio medio del trimestre (USD)")
+            fig_nv.update_yaxes(title_text="Movimiento diario típico (USD)")
+            fig_nv.update_layout(showlegend=False)
+            st.plotly_chart(ui.estilo_fig(fig_nv, 320), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown('<div class="q-nota">Cada punto es un trimestre de la historia descargada: su precio medio y cuánto '
+                        'se movió la acción en un día típico (desviación del cambio diario en dólares).</div>',
+                        unsafe_allow_html=True)
+            st.markdown(ui.html_lectura(lecturas.lectura_browniano(t_b, p_neg, c_usd, c_pct, hor_b)),
+                        unsafe_allow_html=True)
+        with st.expander("Ver ecuaciones y calibración"):
+            st.markdown(f"""
+- **Browniano estándar:** P_t+Δt = P_t + m·Δt + s·√Δt·Z, con Z ~ N(0, 1). El precio puede volverse negativo.
+- **Calibración:** m = 252 · media(ΔP), s = √252 · desv(ΔP) con divisor n − 1, donde ΔP es el cambio diario del precio
+  ajustado en la misma ventana de 504 retornos que usa la pestaña GBM.
+- **Probabilidad de precio negativo:** P(P_T < 0) = Φ((−P₀ − m·T) / (s·√T)).
+- **Comparación justa:** las {config.N_TRAYECTORIAS_GBM:,} trayectorias de ambos modelos usan los mismos choques Z
+  (misma semilla que la pestaña GBM).
+""".replace(",", "."))
+
+    # ---------- Merton: saltos ----------
+    with sub[1]:
+        t_m = res.get("ticker_opcion", config.TICKER_OPCION)
+        m1_, _ = st.columns([1, 3])
+        with m1_:
+            k_salto = st.select_slider("Qué se considera un salto", options=[3.0, 4.0, 5.0], value=3.0, key="mer_umbral",
+                                       format_func=lambda v: f"más de {v:.0f} veces lo normal")
+        x_m = np.log(precios_hoy[t_m] / precios_hoy[t_m].shift(1)).dropna()
+        mer = modelos.calibrar_merton(x_m, k_salto, config.D)
+        st.markdown(ui.html_intro(lecturas.INTRO_MERTON), unsafe_allow_html=True)
+        st.markdown(ui.html_variables(lecturas.variables_merton(mer, k_salto)), unsafe_allow_html=True)
+
+        with st.container(key="tarjeta_mer_saltos"):
+            st.markdown(ui.titulo_tarjeta(f"Días de salto de {t_m} · últimos {len(x_m)} días"), unsafe_allow_html=True)
+            fig_ms = go.Figure()
+            serie_m = precios_hoy[t_m]
+            fig_ms.add_trace(go.Scatter(x=serie_m.index, y=serie_m, mode="lines", name="Precio ajustado",
+                                        line=dict(color=ui.TEXTO, width=1.4)))
+            for signo, nom, color in ((1, "Salto hacia arriba", ui.PALETA[2]), (-1, "Salto hacia abajo", ui.PALETA[1])):
+                f_s = mer.tamanos[np.sign(mer.tamanos) == signo].index
+                fig_ms.add_trace(go.Scatter(x=f_s, y=serie_m.loc[f_s], mode="markers", name=nom,
+                                            marker=dict(size=11, color=color, line=dict(color="#070706", width=1)),
+                                            customdata=mer.tamanos.loc[f_s].values,
+                                            hovertemplate="%{x|%d/%m/%Y}: %{customdata:.1%}<extra></extra>"))
+            fig_ms.update_yaxes(title_text="Precio ajustado (USD)")
+            fig_ms.update_layout(legend=dict(orientation="h", y=1.12, x=0))
+            st.plotly_chart(ui.estilo_fig(fig_ms, 340), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown(ui.html_lectura(lecturas.lectura_saltos(t_m, mer, len(x_m))), unsafe_allow_html=True)
+
+        s0_m = float(s0_hoy[t_m])
+        q_m, r_m = float(res["q"][t_m]), float(res["r"])
+        sig_m = float(par_hoy.loc[t_m, "σ anual"])
+        tipo_m = opcion["tipo"]
+        if contrato_mod is not None:
+            k_m, t_mm, dias_m, cmp_m = contrato_mod["k"], contrato_mod["t"], contrato_mod["dias"], contrato_mod["cmp"]
+            nombre_c = f"el contrato elegido en Opciones ({tipo_m}, strike {k_m:.2f}, vence {contrato_mod['venc']})"
+        else:
+            k_m, dias_m, cmp_m = round(s0_m), 91, None
+            t_mm = dias_m / 365
+            nombre_c = f"una {tipo_m} at-the-money a 3 meses (no hay cadena de opciones descargada)"
+        v_bs_m = crr.black_scholes(s0_m, k_m, t_mm, r_m, q_m, sig_m, tipo_m)
+        v_mer = modelos.precio_merton(s0_m, k_m, t_mm, r_m, q_m, mer.sigma, mer.lam, mer.mu_j, mer.delta_j, tipo_m)
+        p_salto = modelos.prob_algun_salto(mer.lam, t_mm)
+
+        with st.container(key="tarjeta_mer_opcion"):
+            st.markdown(ui.titulo_tarjeta("¿Cuánto vale la opción si hay saltos?"), unsafe_allow_html=True)
+            st.markdown(f'<div class="q-nota">Se valora {nombre_c}. S0 = {s0_m:.2f}, r = {r_m:.2%}, q = {q_m:.2%}.</div>',
+                        unsafe_allow_html=True)
+            valida_m = bool(cmp_m and cmp_m.get("valida"))
+            st.markdown(ui.html_kpis([
+                ("Sin saltos (GBM)", lecturas._usd(v_bs_m), f"europea · σ = {sig_m:.1%}".replace(".", ",")),
+                ("Con saltos (Merton)", lecturas._usd(v_mer), f"europea · {mer.lam:.1f} saltos/año".replace(".", ",")),
+                ("Precio medio del mercado", lecturas._usd(cmp_m["medio"]) if valida_m else "—",
+                 "entre bid y ask" if valida_m else "sin cotización utilizable"),
+                ("Probabilidad de un salto", f"{p_salto:.0%}", f"antes del vencimiento · {dias_m} días"),
+            ]), unsafe_allow_html=True)
+            g1_, g2_ = st.columns([1.4, 1], gap="medium")
+            with g1_:
+                fig_mo = go.Figure()
+                if valida_m:
+                    bid_m, ask_m = contrato_mod["bid"], contrato_mod["ask"]
+                    fig_mo.add_trace(go.Scatter(x=[bid_m, ask_m], y=["Mercado"] * 2, mode="lines",
+                                                line=dict(color=ui.ORO, width=18), name="Rango bid – ask",
+                                                hovertemplate="%{x:.2f}<extra></extra>"))
+                fig_mo.add_trace(go.Scatter(x=[v_bs_m], y=["Modelos"], mode="markers", name="Sin saltos (GBM)",
+                                            marker=dict(symbol="circle-open", size=14, color=ui.TEXTO, line=dict(width=2))))
+                fig_mo.add_trace(go.Scatter(x=[v_mer], y=["Modelos"], mode="markers", name="Con saltos (Merton)",
+                                            marker=dict(symbol="diamond", size=16, color=ui.ORO_CLARO)))
+                fig_mo.update_xaxes(title_text="Prima por acción (USD)")
+                fig_mo.update_layout(legend=dict(orientation="h", y=1.3, x=0))
+                st.plotly_chart(ui.estilo_fig(fig_mo, 240), width="stretch", config=ui.PLOTLY_CONFIG)
+            with g2_:
+                st.markdown(ui.html_lectura(lecturas.lectura_merton(v_bs_m, v_mer, cmp_m, p_salto, tipo_m, dias_m)),
+                            unsafe_allow_html=True)
+        with st.expander("Ver ecuaciones, saltos detectados y supuestos"):
+            st.markdown(f"""
+- **Modelo:** el log-precio sigue un GBM con volatilidad σ más saltos que llegan como un proceso de Poisson con
+  intensidad λ por año; cada salto es normal en logaritmo, con media μ_J y desviación δ_J.
+- **Detección de saltos:** días en que |x − mediana| supera {k_salto:.0f} veces la desviación robusta
+  (1,4826 · desviación absoluta mediana, que no se infla con los propios saltos). Umbral: {mer.umbral:.2%}.
+- **Calibración:** σ con los días normales; λ = saltos / años de la muestra; μ_J y δ_J con los días de salto, descontando
+  el retorno medio de un día normal. Ventana: los mismos {len(x_m)} retornos que usa la pestaña GBM.
+- **Precio (Merton, 1976):** promedio de precios Black-Scholes ponderado por la probabilidad de n saltos antes del
+  vencimiento: σ_n² = σ² + n·δ_J²/T y r_n = r − λκ + n·ln(1 + κ)/T, con κ = e^(μ_J + δ_J²/2) − 1.
+- **Supuesto:** se valora la versión europea. El contrato real es americano; en la pestaña Opciones, el ejercicio
+  anticipado vale {lecturas._usd(contrato_mod["v_am"] - contrato_mod["v_eu"]) if contrato_mod else "—"} según el árbol CRR.
+""")
+            if len(mer.tamanos):
+                st.dataframe(pd.DataFrame({"Fecha": mer.tamanos.index.strftime("%Y-%m-%d"),
+                                           "Movimiento del día": mer.tamanos.values})
+                             .style.format({"Movimiento del día": "{:.2%}"}), hide_index=True, width="stretch")
+
+    # ---------- Browniano fraccional ----------
+    with sub[2]:
+        x_all = np.log(limpio.ajustados / limpio.ajustados.shift(1)).dropna()
+        tab_h = _tabla_hurst(x_all, semilla_base)
+        f1_, _ = st.columns([1, 3])
+        with f1_:
+            t_f = st.selectbox("Acción", tickers, key="frac_ticker")
+        h_f = float(tab_h.set_index("Ticker").loc[t_f, "H"])
+        st.markdown(ui.html_intro(lecturas.INTRO_FRACCIONAL), unsafe_allow_html=True)
+        st.markdown(ui.html_variables(lecturas.variables_fraccional(h_f, t_f)), unsafe_allow_html=True)
+
+        with st.container(key="tarjeta_frac_hurst"):
+            st.markdown(ui.titulo_tarjeta(f"Memoria de las 10 acciones · {len(x_all)} retornos"), unsafe_allow_html=True)
+            colores_h = {"Sin memoria": ui.ORO_CLARO, "Tendencia": ui.PALETA[2], "Reversión": ui.PALETA[1]}
+            fig_h = go.Figure()
+            fig_h.add_trace(go.Bar(x=tab_h["Ticker"], y=tab_h["Sin memoria hasta"] - tab_h["Sin memoria desde"],
+                                   base=tab_h["Sin memoria desde"], marker_color="rgba(232,226,212,.10)",
+                                   name="Zona sin memoria", hoverinfo="skip", width=0.7))
+            for lect, color in colores_h.items():
+                sel = tab_h[tab_h["Lectura"] == lect]
+                if len(sel):
+                    fig_h.add_trace(go.Scatter(x=sel["Ticker"], y=sel["H"], mode="markers", name=lect,
+                                               marker=dict(size=14, color=color, line=dict(color="#070706", width=1)),
+                                               hovertemplate="%{x}: H = %{y:.3f}<extra></extra>"))
+            fig_h.add_hline(y=0.5, line_color=ui.TENUE, line_dash="dot", annotation_text="H = 0,5 (supuesto del GBM)",
+                            annotation_font_color=ui.TENUE)
+            fig_h.update_yaxes(title_text="Exponente de Hurst H")
+            fig_h.update_layout(legend=dict(orientation="h", y=1.12, x=0), barmode="overlay")
+            st.plotly_chart(ui.estilo_fig(fig_h, 340), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown('<div class="q-nota">La franja gris es el rango de H que se obtiene al desordenar los días al azar, '
+                        'es decir, lo que daría una acción sin memoria con la misma cantidad de datos. Si el punto cae '
+                        'dentro, no hay evidencia de memoria.</div>', unsafe_allow_html=True)
+            st.markdown(ui.html_lectura(lecturas.lectura_hurst(tab_h, h_v)), unsafe_allow_html=True)
+
+        v_f = modelos.volatilidad_por_horizonte(x_all[t_f])
+        fac_f = modelos.factor_var_hurst(h_v, h_f)
+        with st.container(key="tarjeta_frac_escala"):
+            st.markdown(ui.titulo_tarjeta(f"¿Crece el riesgo de {t_f} con la raíz del tiempo?"), unsafe_allow_html=True)
+            e1_, e2_ = st.columns([1.3, 1], gap="medium")
+            with e1_:
+                fig_e = go.Figure()
+                fig_e.add_trace(go.Scatter(x=v_f["Sesiones"], y=v_f["Real"], mode="lines+markers", name="Real",
+                                           line=dict(color=ui.ORO_CLARO, width=2.5)))
+                fig_e.add_trace(go.Scatter(x=v_f["Sesiones"], y=v_f["Regla √m (GBM)"], mode="lines+markers",
+                                           name="Regla de la raíz del tiempo (GBM)",
+                                           line=dict(color=ui.TENUE, width=2, dash="dot")))
+                fig_e.update_xaxes(title_text="Horizonte (sesiones)")
+                fig_e.update_yaxes(title_text="Volatilidad del retorno acumulado", tickformat=".0%")
+                fig_e.update_layout(legend=dict(orientation="h", y=1.12, x=0), hovermode="x unified")
+                st.plotly_chart(ui.estilo_fig(fig_e, 320), width="stretch", config=ui.PLOTLY_CONFIG)
+            with e2_:
+                st.markdown(ui.html_kpis([
+                    (f"H de {t_f}", f"{h_f:.2f}".replace(".", ","), str(tab_h.set_index("Ticker").loc[t_f, "Lectura"])),
+                    (f"VaR a {h_v} días con H", f"{fac_f - 1:+.1%}".replace(".", ","), "frente a la regla √h"),
+                ]), unsafe_allow_html=True)
+                st.markdown(ui.html_lectura(lecturas.lectura_escalamiento(t_f, h_f, fac_f, h_v, v_f,
+                                                                           str(tab_h.set_index("Ticker").loc[t_f, "Lectura"]))),
+                            unsafe_allow_html=True)
+
+        with st.container(key="tarjeta_frac_caminos"):
+            st.markdown(ui.titulo_tarjeta(f"Cómo se vería {t_f} con distinta memoria · 1 año"), unsafe_allow_html=True)
+            sig_f = float(par_hoy.loc[t_f, "σ anual"])
+            fechas_f = pd.bdate_range(limpio.sin_ajustar.index[-1], periods=253)
+            fig_c = go.Figure()
+            for h_ej, nom, color in ((0.3, "H = 0,3 · reversión", ui.PALETA[1]), (0.5, "H = 0,5 · sin memoria (GBM)", ui.TEXTO),
+                                     (0.7, "H = 0,7 · tendencia", ui.PALETA[2])):
+                b_h = modelos.simular_fbm(h_ej, 252, 1, semilla_base)[0]
+                fig_c.add_trace(go.Scatter(x=fechas_f, y=float(s0_hoy[t_f]) * np.exp(sig_f * b_h), mode="lines", name=nom,
+                                           line=dict(color=color, width=1.6)))
+            fig_c.update_yaxes(title_text="Precio (USD)")
+            fig_c.update_layout(legend=dict(orientation="h", y=1.12, x=0), hovermode="x unified")
+            st.plotly_chart(ui.estilo_fig(fig_c, 320), width="stretch", config=ui.PLOTLY_CONFIG)
+            st.markdown(ui.html_lectura(
+                "Los tres caminos usan los mismos choques aleatorios y la misma volatilidad anual; solo cambia la memoria. "
+                "Con <b>H = 0,3</b> el precio zigzaguea y se devuelve; con <b>H = 0,7</b> forma rachas largas de subida o de "
+                f"bajada. El H estimado de {t_f} ({lecturas._num(h_f)}) indica a cuál de los tres se parece más."),
+                unsafe_allow_html=True)
+
+        with st.expander("Ver la tabla de H y el método"):
+            st.dataframe(tab_h.style.format({"H": "{:.3f}", "Sin memoria desde": "{:.3f}", "Sin memoria hasta": "{:.3f}"}),
+                         hide_index=True, width="stretch")
+            st.markdown(f"""
+- **Estimación de H (varianza agregada):** se suman los log-retornos en ventanas móviles de m = 1, 2, 4, 8, 16 y 32
+  sesiones y se mide la desviación de esas sumas. Si crece como m^H, H es la pendiente de log(desviación) contra log(m).
+- **Zona sin memoria:** percentiles 5 y 95 de H en 200 versiones de la misma serie con los días desordenados al azar
+  (semilla {semilla_base}). Incluye el sesgo que tiene el estimador con esta cantidad de datos.
+- **Datos:** toda la historia limpia ({len(x_all)} retornos), porque estimar memoria requiere muestras largas.
+- **Caminos:** browniano fraccional por Cholesky, con incrementos de covarianza ½(|k+1|^2H − 2|k|^2H + |k−1|^2H) y
+  varianza 1 a un año, multiplicados por la σ anual de la acción.
+- **VaR:** el VaR a h días con memoria se escala con h^H en lugar de √h; el cambio relativo es h^H / √h − 1.
+""")
+
+    # ---------- Modelos a cargo de la segunda integrante ----------
+    pendientes = [
+        ("Ornstein-Uhlenbeck · Vasicek", "La tasa libre de riesgo (IRX) y la diferencia de precio entre XOM y CVX",
+         "¿Qué tanto puede moverse la tasa durante la vida de la opción y cuánto cambia la prima? Si dos acciones del "
+         "mismo sector se separan, ¿vuelven a juntarse?"),
+        ("Herding · comportamiento en manada", "Las 10 acciones y la cartera",
+         "¿Qué le pasa a nuestro riesgo cuando todos los inversionistas actúan igual? Correlación promedio en el tiempo "
+         "y simulación de inversionistas que se copian entre sí, con su efecto en el VaR."),
+        ("Opciones reales", "Un proyecto de ejemplo con la volatilidad de XOM y CVX, r del Tesoro y el árbol CRR",
+         "¿Cuánto vale la flexibilidad de esperar, expandir o abandonar un proyecto?"),
+    ]
+    for i_p, (nom_p, datos_p, preg_p) in enumerate(pendientes, start=3):
+        with sub[i_p]:
+            with st.container(key=f"tarjeta_pendiente_{i_p}"):
+                st.markdown(ui.titulo_tarjeta(f"{nom_p} · en construcción"), unsafe_allow_html=True)
+                st.markdown(ui.html_intro(preg_p), unsafe_allow_html=True)
+                st.markdown(f'<div class="q-nota">Datos: {datos_p}. Sigue la misma estructura de las otras subpestañas: qué '
+                            'busca el modelo, sus variables y qué pasa si suben o bajan, la aplicación a nuestro caso con '
+                            'un gráfico y su lectura, y las ecuaciones en un desplegable. Guía: docs/guia_modelos.md.</div>',
+                            unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Exportación de resultados (entregable): ZIP con un CSV por resultado y el resumen de
+# parámetros y semillas. Se arma al final porque usa lo calculado en todas las pestañas.
+# ---------------------------------------------------------------------------
+def _g(nombre: str):
+    """Variable calculada en una pestaña, o None si esa parte no se calculó (p. ej., sin cadena de opciones)."""
+    return globals().get(nombre)
+
+
+def _var_tabla():
+    filas = []
+    for r_ in (_g("r_hist"), _g("r_norm"), _g("r_mc")):
+        if r_:
+            filas.append({"Método": r_["metodo"], "VaR (USD)": r_["var"], "ES (USD)": r_["es"]})
+    return pd.DataFrame(filas).set_index("Método") if filas else None
+
+
+proy = pd.DataFrame([
+    {"Ticker": t, "Horizonte": h_n, "Sesiones": h_s, "S0": float(s0_hoy[t]),
+     "P10": gbm.cuantil_gbm(float(s0_hoy[t]), float(par_hoy.loc[t, "a = μ − q"]), float(par_hoy.loc[t, "σ anual"]),
+                            h_s / config.D, 0.10),
+     "P50": gbm.cuantil_gbm(float(s0_hoy[t]), float(par_hoy.loc[t, "a = μ − q"]), float(par_hoy.loc[t, "σ anual"]),
+                            h_s / config.D, 0.50),
+     "P90": gbm.cuantil_gbm(float(s0_hoy[t]), float(par_hoy.loc[t, "a = μ − q"]), float(par_hoy.loc[t, "σ anual"]),
+                            h_s / config.D, 0.90)}
+    for t in tickers for h_n, h_s in gbm.HORIZONTES.items()]).set_index("Ticker")
+
+c_el_x, probs_x, cmp_x = _g("c_el"), _g("probs"), (_g("contrato_mod") or {}).get("cmp")
+contrato_x = None
+if c_el_x is not None:
+    contrato_x = pd.DataFrame([{
+        "Contrato": c_el_x["Contrato"], "Subyacente": res.get("ticker_opcion"), "Tipo": opcion["tipo"],
+        "Strike": c_el_x["Strike"], "Vencimiento": c_el_x["Vencimiento"], "Días": c_el_x["Días"],
+        "Bid": c_el_x["Bid"], "Ask": c_el_x["Ask"], "Prima pagada": _g("prima"),
+        "CRR americana": _g("v_am_m"), "CRR europea": _g("v_eu_m"),
+        "Merton europea": _g("v_mer"), "Precio medio mercado": (cmp_x or {}).get("medio"),
+        "Diferencia δ": (cmp_x or {}).get("delta"),
+        "P(ejercicio)": (probs_x or {}).get("p_ejercicio"), "P(ganancia)": (probs_x or {}).get("p_beneficio"),
+        "Punto de equilibrio": (probs_x or {}).get("punto_equilibrio"),
+    }]).set_index("Contrato")
+
+crr_x = None
+if _g("v_eu") is not None:
+    crr_x = pd.DataFrame([{"Tipo": opcion["tipo"], "S0": opcion["s0"], "K": opcion["k"], "T": opcion["t"],
+                           "r": opcion["r"], "q": opcion["q"], "σ": opcion["sigma"], "N": int(opcion["n"]),
+                           "Europea": _g("v_eu"), "Americana": _g("v_am")}]).set_index("Tipo")
+
+pesos_x = pd.DataFrame(carteras)
+pesos_x.insert(0, "Sector", [sect[t] for t in pesos_x.index])
+info_bt_x = _g("info_bt")
+pres_x = _g("pres")
+mer_x = _g("mer")
+det_r_x = _g("det_r")
+
+tablas_x = {
+    "01_precios_ajustados": limpio.ajustados,
+    "02_precios_sin_ajustar": limpio.sin_ajustar,
+    "03_calidad_por_ticker": limpio.calidad_por_ticker,
+    "04_parametros_calibracion": res["parametros"],
+    "05_correlaciones": res["corr"],
+    "06_covarianza_diaria": res["cov_diaria"],
+    "07_parametros_gbm_hoy": par_hoy,
+    "08_gbm_proyecciones_P10_P50_P90": proy,
+    "09_crr_calculadora": crr_x,
+    "10_opciones_candidatos": _g("cands"),
+    "11_contrato_elegido": contrato_x,
+    "12_var_es_por_metodo": _var_tabla(),
+    "13_excepciones_ultimo_anio": _g("exc"),
+    "14_estres": _g("tabla_e"),
+    "15_pesos_carteras": pesos_x,
+    "16_orden_de_compra": _g("compra"),
+    "17_estrategias_resultados": pd.DataFrame(info_bt_x).T if info_bt_x else None,
+    "18_estrategias_valor_diario": _g("bt"),
+    "19_presupuesto_riesgo": pd.DataFrame({"Invertido (USD)": pres_x.invertido}) if pres_x else None,
+    "20_rolling_metricas": _g("res_r").set_index("Ticker") if _g("res_r") is not None else None,
+    "21_rolling_detalle": (pd.concat({t: d for t, d in det_r_x.items()}, names=["Ticker", "Fecha origen"])
+                           if det_r_x else None),
+    "22_modelos_hurst": _g("tab_h").set_index("Ticker") if _g("tab_h") is not None else None,
+    "23_modelos_merton_saltos": (pd.DataFrame({"Movimiento del día": mer_x.tamanos}) if mer_x else None),
+}
+
+conf_x = _g("cartera_v")
+resumen_x = {
+    "Ejecución": {
+        "Exportado": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+        "Fuente de datos": meta.get("fuente", "—"),
+        "Fecha de consulta": str(meta.get("consulta", meta.get("cargado_en", "—"))).replace("T", " "),
+        "Período limpio": f"{resumen['desde']} a {resumen['hasta']}",
+        "Retornos conjuntos": resumen["retornos_conjuntos"],
+        "Sesiones descartadas": resumen["sesiones_descartadas"],
+    },
+    "Semillas": {
+        "Semilla de la app": semilla_base,
+        "GBM (por acción)": f"semilla + posición del ticker ({semilla_base} a {semilla_base + len(tickers) - 1})",
+        "VaR Monte Carlo": semilla_base,
+        "Probabilidades de la opción": semilla_base,
+        "Hurst (permutaciones)": "semilla + posición del ticker",
+    },
+    "Universo": {t: sect[t] for t in tickers},
+    "Ventanas": {
+        "Calibración": f"{len(cal_v) - 1} retornos · {cal_v.index[1]:%Y-%m-%d} a {cal_v.index[-1]:%Y-%m-%d}",
+        "Evaluación": f"{len(ev_v) - 1} retornos · {ev_v.index[1]:%Y-%m-%d} a {ev_v.index[-1]:%Y-%m-%d}",
+        "GBM y Opciones (hoy)": f"{len(precios_hoy) - 1} retornos hasta {precios_hoy.index[-1]:%Y-%m-%d}",
+        "Rolling": f"252 retornos · H = {int(estrategias['h_rolling'])} sesión(es)",
+    },
+    "Cartera y riesgo": {
+        "Capital B (USD)": B, "Confianza α": alpha_v, "Horizonte VaR (días)": h_v,
+        "Cartera evaluada en Riesgo": conf_x, "Costo de transacción": float(cartera["costo"]),
+        "Peso mínimo": config.W_MIN, "Peso máximo": config.W_MAX, "Tope por sector": config.MAX_SECTOR,
+        "Presupuesto de riesgo V (USD)": float(estrategias["presupuesto_v"]),
+        "Escenarios VaR Monte Carlo": config.N_ESCENARIOS_VAR,
+        "Excepciones último año": _g("n_exc"), "Zona Basilea": _g("zona"),
+    },
+    "Tasas": {"r continua": res["r"], "Fuente de r": res["fuente_r"],
+              **{f"q {t}": res["q"][t] for t in tickers}},
+    "Opción": {"Subyacente": res.get("ticker_opcion"), "Tipo": opcion["tipo"],
+               "Trayectorias GBM": config.N_TRAYECTORIAS_GBM,
+               "Contrato elegido": c_el_x["Contrato"] if c_el_x is not None else "sin cadena de opciones"},
+    "Versiones": meta.get("versiones", {}),
+}
+
+with zona_exportar.container():
+    x1, x2 = st.columns([3, 1])
+    with x2:
+        st.download_button("Exportar resultados (CSV)", exportar.armar_zip(tablas_x, resumen_x),
+                           f"quantia_resultados_{pd.Timestamp.now():%Y%m%d_%H%M}.zip", mime="application/zip",
+                           width="stretch", key="exportar_todo",
+                           help="ZIP con un CSV por resultado y el resumen de parámetros y semilla.")
+    with x1:
+        st.markdown('<div class="q-nota" style="padding-top:10px">Un archivo ZIP con todos los resultados en CSV '
+                    '(datos, parámetros, proyecciones, opción, VaR, carteras, estrategias, evaluación y modelos) y '
+                    'el resumen de parámetros y semilla para reproducir la ejecución.</div>', unsafe_allow_html=True)
