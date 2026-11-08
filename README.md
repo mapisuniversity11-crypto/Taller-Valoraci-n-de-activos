@@ -24,7 +24,7 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # app + pytest (para desplegar basta requirements.txt)
 streamlit run app.py
 ```
 
@@ -34,10 +34,22 @@ Pruebas:
 pytest
 ```
 
+## Despliegue (Streamlit Community Cloud)
+
+1. En share.streamlit.io, **Create app** → este repositorio, rama `main`, archivo `app.py`.
+2. **Advanced settings → Python version → 3.13** (las versiones de `requirements.txt` están fijadas para 3.13).
+3. **Deploy.** Cada `git push` actualiza la app publicada.
+
+Si Yahoo Finance no responde desde el servidor, la app usa sola el respaldo de `data/raw` y lo avisa (D25).
+Conviene actualizar ese respaldo el día anterior a la sustentación: correr la app localmente con
+"Guardar descarga como respaldo" marcado y subir `data/raw`.
+
 ## Estructura
 
 ```
-app.py              Interfaz Streamlit (solo muestra; no calcula)
+app.py              Portada, panel de entradas, ejecución y orden de las pestañas
+vistas/             Un archivo por pestaña: datos, gbm, opciones, riesgo, asignacion,
+                    evaluacion, modelos; exportacion (botón CSV); memoria (cálculos en caché)
 .streamlit/         Tema de la app (negro y dorado)
 src/
   config.py         Valores por defecto (tickers, fechas, α, h, semilla...)
@@ -59,6 +71,8 @@ docs/
   decisiones.md     Bitácora de decisiones y su justificación
   plan.md           Plan de trabajo por entrega
   guia_modelos.md   Cómo agregar un modelo a la pestaña Modelos
+requirements.txt    Versiones exactas para ejecutar y desplegar
+requirements-dev.txt  Lo anterior + pytest
 ```
 
 ## Entregas

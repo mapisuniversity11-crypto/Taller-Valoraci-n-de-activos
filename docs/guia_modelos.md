@@ -32,12 +32,16 @@ Mismo orden y mismo estilo que las tres que ya están:
 - **Cálculos:** funciones en `src/modelos.py`, sin Streamlit, para poder probarlas.
 - **Frases:** en `src/lecturas.py`. Se calculan con los datos de cada ejecución, así que se actualizan solas.
   Usa `_usd`, `_pct` y `_num` para el formato en español.
-- **Pantalla:** en `app.py`, al final, dentro de `with sub[3]:`, `with sub[4]:` o `with sub[5]:`. Hay que borrar la
-  tarjeta "en construcción" de la lista `pendientes`.
+- **Pantalla:** en `vistas/modelos.py`, dentro de `with sub[3]:`, `with sub[4]:` o `with sub[5]:`. Hay que borrar la
+  tarjeta "en construcción" de la lista `pendientes`. No hace falta tocar `app.py` ni las otras vistas.
 - **Pruebas:** en `tests/test_modelos.py`, por ejemplo un caso con respuesta conocida.
 - **Decisiones:** una entrada nueva en `docs/decisiones.md`.
 
-## Variables ya disponibles en `app.py`
+## Variables ya disponibles en `vistas/modelos.py`
+
+Al inicio de `mostrar(ctx)` se sacan del contexto `ctx` las variables que usa la pestaña. Si necesitas otra de esta
+tabla, agrégala igual: `w_v = ctx["w_v"]`. Las que vienen de otras pestañas (como `w_v`, de Riesgo) ya están en `ctx`
+porque Riesgo se dibuja antes que Modelos.
 
 | Variable | Contenido |
 |---|---|
@@ -48,7 +52,8 @@ Mismo orden y mismo estilo que las tres que ya están:
 | `par_hoy` | Parámetros calibrados en esa ventana (`"σ anual"`, `"a = μ − q"`, ...) |
 | `res["r"]`, `res["q"]` | Tasa libre de riesgo continua y dividendos continuos |
 | `opcion` | Entradas del panel de la opción (S0, K, T, r, q, σ, N, tipo) |
-| `w_v`, `cov_v`, `B`, `alpha_v`, `h_v` | Pesos de la cartera de la pestaña Riesgo, covarianza, capital, confianza y horizonte del VaR |
+| `carteras`, `cov_v`, `B`, `alpha_v`, `h_v` | Pesos de las carteras, covarianza diaria, capital, confianza y horizonte del VaR |
+| `cartera_v`, `w_v`, `r_hist`, `r_norm`, `r_mc` | Cartera elegida en Riesgo, sus pesos y su VaR/ES por los tres métodos |
 | `semilla_base` | Semilla de la app; úsala para que los resultados sean reproducibles |
 
 ## Reglas de estilo
@@ -56,4 +61,8 @@ Mismo orden y mismo estilo que las tres que ya están:
 - Gráficos simples: líneas, barras o puntos, con colores de `ui` (`ui.ORO_CLARO`, `ui.TEXTO`, `ui.TENUE`, `ui.PALETA`).
 - Cada gráfico tiene título en forma de pregunta y una lectura que la responde con los números del caso.
 - Unidades: tasas y volatilidades anuales en decimal, tiempo en años, 252 sesiones por año.
-- Después de cambiar algo en `src/`, reinicia la app (Ctrl+C y `streamlit run app.py`).
+- Si un cálculo tarda (simulaciones grandes), guárdalo en memoria con una función en `vistas/memoria.py`.
+- Si algo de tu modelo debe salir en la exportación CSV, devuélvelo en el `return` de `mostrar` y agrégalo a
+  `tablas_x` en `vistas/exportacion.py`.
+- Después de cambiar algo en `src/` o `vistas/`, reinicia la app (Ctrl+C y `streamlit run app.py`).
+- Antes de empezar a trabajar: `git pull`. Al terminar: `pytest`, luego `git add`, `git commit` y `git push`.

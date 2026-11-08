@@ -259,6 +259,33 @@ opciones) se omiten en lugar de romper la exportación.
 **Alternativas consideradas:** un botón por tabla en cada pestaña (más desordenado); Excel con hojas (el instructivo
 pide CSV).
 
+## D25 — Respaldo automático si Yahoo Finance falla
+**Fecha:** 2026-11-08
+**Responsable:** María Paula Muñoz Malaver
+**Decisión:** Con la fuente "Yahoo Finance", si la descarga o la limpieza fallan y hay respaldo en `data/raw`, la app
+usa el respaldo sola y muestra un aviso con la fecha de esos datos. Igual con la cadena de opciones: si Yahoo no la
+entrega, se usa la guardada.
+**Por qué:** En Streamlit Community Cloud muchos usuarios comparten servidores y Yahoo a veces los bloquea por exceso
+de solicitudes. Sin esto, quien abre el enlace ve un error y tendría que saber que debe cambiar la fuente a mano.
+**Cómo se usa:** el día anterior a la sustentación se corre la app localmente con "Guardar descarga como respaldo"
+y se sube `data/raw` a GitHub, para que el respaldo tenga datos de un día antes.
+
+## D26 — App partida en vistas, cálculos en memoria y versiones fijas
+**Fecha:** 2026-11-08
+**Responsable:** María Paula Muñoz Malaver
+**Decisión:**
+- `app.py` solo tiene la portada, el panel de entradas, la ejecución y el orden de las pestañas. Cada pestaña vive en
+  `vistas/<pestaña>.py` con una función `mostrar(ctx)` que recibe el contexto común y devuelve lo que usan las
+  siguientes pestañas y la exportación.
+- `vistas/memoria.py` guarda con `st.cache_data` los cálculos más pesados (evaluación rolling, backtest, Hurst, VaR
+  Monte Carlo y excepciones); solo se repiten cuando cambian sus entradas.
+- `requirements.txt` fija las versiones exactas con las que se probó (Python 3.13); `pytest` pasa a
+  `requirements-dev.txt`.
+**Por qué:** Un `app.py` de 1600 líneas era difícil de leer y de defender, y dos personas editándolo a la vez generan
+conflictos en git. La memoria hace que cada clic responda rápido en los servidores gratuitos. Las versiones fijas
+evitan que el despliegue instale una versión nueva que cambie el comportamiento.
+**Verificación:** la exportación completa (25 archivos) da resultados idénticos antes y después del cambio.
+
 ---
 
 _Plantilla para nuevas decisiones:_

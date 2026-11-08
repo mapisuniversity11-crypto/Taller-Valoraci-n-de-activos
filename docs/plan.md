@@ -1,43 +1,38 @@
-# Plan de trabajo
+# Plan de trabajo y estado
 
-## Entrega 1 — Datos y CRR (viernes 23 de octubre de 2026, 12:00 m.)
+## Entrega 1 — Datos y CRR · lista
+- [x] Estructura del repositorio, README y bitácora de decisiones
+- [x] Universo: 10 acciones en 5 sectores (D3)
+- [x] Descarga de Yahoo (ajustado y sin ajustar), limpieza, calidad y respaldo en `data/raw`
+- [x] Calibración: retornos, σ, μ total, a = μ − q, covarianza y correlación (n − 1)
+- [x] Árbol binomial CRR europeo y americano; prueba de control = 10,4506
+- [x] Pestaña Datos y calculadora CRR
 
-### Miércoles 21 (noche)
-- [x] Estructura del repositorio, README, bitácora de decisiones
-- [x] Elegir tickers y sectores (D3)
-- [x] Esqueleto de la app con entradas, pestañas y botón (Paso 1)
-- [x] Subir a GitHub
-- [x] Paso 1 completo: qᵢ por acción, entradas del CRR, V y H (D6, D7)
-- [x] `datos.py`: descarga ajustada + sin ajustar, `end` exclusiva, metadatos y versiones
-- [x] `datos.py`: limpieza, sesiones comunes, reporte de calidad, respaldo/carga CSV
-- [x] `calibracion.py`: retornos, σ, μ total, a = μ − q, covarianza y correlación (n − 1)
-- [x] Pestaña Datos: calidad, precios normalizados, histogramas, correlaciones, parámetros
-- [x] Pruebas de datos y calibración (con datos simulados)
-
-### Jueves 22
-- [ ] **Probar la descarga real de Yahoo en el computador** y corregir lo que falle
-- [ ] Subir el respaldo `data/raw` al repositorio
-- [ ] `crr.py`: europea y americana, call y put, validación de pQ, T = 0
-- [ ] Prueba: control CRR = 10,4506
-- [ ] Pestaña Opciones: árbol de 3 pasos y gráfico de convergencia
-
-### Viernes 23 (mañana)
-- [ ] Prueba completa de punta a punta (incluye carga desde CSV si falla Yahoo)
-- [ ] Actualizar README y bitácora
-- [ ] Etiqueta `entrega-1` en git y entrega
-
-## Entrega 2 — GBM, contrato, rolling, VaR
-Pasos 4, 5, 6, 7, 9, 10 y 13.
+## Entrega 2 — GBM, contrato, rolling y VaR · lista
+- [x] GBM: trayectorias, cuantiles P10–P50–P90 y probabilidades (Paso 4)
+- [x] Cadena de opciones real, contratos candidatos y elección (Pasos 5 a 7)
+- [x] Valoración CRR del contrato frente al mercado (Paso 9)
+- [x] VaR y ES histórico, normal y Monte Carlo; excepciones, fuera de muestra y estrés (Paso 10)
+- [x] Evaluación rolling del GBM: RMSE y MAPE frente al pronóstico ingenuo (Paso 13)
 
 ## Entrega 3 — Asignación y demostración
-Pasos 11 y 12, exportación CSV y resumen de parámetros y semilla, preparación de la sustentación.
+- [x] Carteras de mínimo VaR, inverso al VaR y corrección por sector; orden de compra (Paso 11)
+- [x] Estrategias en el último año y presupuesto de riesgo (Paso 12)
+- [x] Exportación de resultados en CSV con resumen de parámetros y semilla (D24)
+- [x] Pestaña Modelos: browniano estándar, Merton y browniano fraccional (D23)
+- [x] Respaldo automático si Yahoo falla, versiones fijas y cálculos en memoria (D25, D26)
+- [ ] Pestaña Modelos: Ornstein-Uhlenbeck / Vasicek, herding y opciones reales (Danna Caballero)
+- [ ] Desplegar en Streamlit Community Cloud y probar el enlace
+- [ ] Actualizar el respaldo `data/raw` el día anterior a la sustentación
+- [ ] Preparar la sustentación: cada integrante explica una función y una decisión
+- [ ] Etiqueta final en git
 
 ## Puntos de evaluación (/100)
-| Componente | Puntos |
-|---|---|
-| Datos | 15 |
-| Opciones / mercado | 15 |
-| GBM, rolling y RMSE/MAPE | 20 |
-| VaR / ES | 15 |
-| Asignación / estrategias | 20 |
-| Funcionamiento y sustentación | 15 |
+| Componente | Puntos | Dónde está en la app |
+|---|---|---|
+| Datos | 15 | Datos |
+| Opciones / mercado | 15 | Opciones |
+| GBM, rolling y RMSE/MAPE | 20 | GBM y Evaluación |
+| VaR / ES | 15 | Riesgo |
+| Asignación / estrategias | 20 | Asignación |
+| Funcionamiento y sustentación | 15 | Toda la app |

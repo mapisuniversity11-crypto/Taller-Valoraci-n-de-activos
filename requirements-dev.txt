@@ -1,0 +1,3 @@
+# Para desarrollar y correr las pruebas (no hace falta en el despliegue).
+-r requirements.txt
+pytest>=8.0
