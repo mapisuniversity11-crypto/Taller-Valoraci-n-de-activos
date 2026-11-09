@@ -286,6 +286,58 @@ conflictos en git. La memoria hace que cada clic responda rápido en los servido
 evitan que el despliegue instale una versión nueva que cambie el comportamiento.
 **Verificación:** la exportación completa (25 archivos) da resultados idénticos antes y después del cambio.
 
+## D27 — Ornstein-Uhlenbeck / Vasicek: tasa del Tesoro y acciones del mismo sector
+**Fecha:** 2026-11-09
+**Responsable:** Danna Caballero
+**Decisión:**
+- Se calibra con la regresión AR(1) diaria, que es la discretización exacta del proceso (no la de Euler):
+  b = e^(−κΔt), θ = a/(1 − b), σ = desv(ε)·√(2κ/(1 − b²)). Si b ≥ 1, κ = 0 (camino al azar).
+- Se informa si la reversión es estadísticamente real con la prueba de Dickey-Fuller (t < −2,86 al 5 %, t < −2,57 al
+  10 %). Si no lo es, la lectura advierte que θ es poco confiable.
+- Tasa: el histórico de `^IRX` se descarga al ejecutar y se guarda en `data/raw/tasa_irx.csv`; se convierte con
+  r = ln(1 + IRX/100), igual que la r de la app. Las trayectorias arrancan en la r que usa la app.
+- La prima se revalora con la tasa **promedio** hasta el vencimiento (P10 y P90 de r̄, fórmula cerrada de Vasicek),
+  porque es la que descuenta el pago final; con el árbol CRR americano y los datos del contrato elegido.
+- Par de acciones: diferencia de log-rendimientos acumulados de dos acciones del mismo sector (XOM − CVX por defecto),
+  con toda la historia limpia.
+**Por qué:** la AR(1) da κ, θ y σ sin sesgo de discretización y con un solo cálculo; la prueba evita presentar una
+reversión que los datos no muestran (la tasa del Tesoro sigue a la Reserva Federal y puede no tener un nivel fijo en
+pocos años). Trabajar bajo la medida física es una prueba de sensibilidad, no un modelo de opciones con tasa estocástica.
+**Alternativas consideradas:** máxima verosimilitud (da los mismos valores que la AR(1) en este modelo); modelo CIR
+(evita tasas negativas, pero con estas tasas y horizontes la probabilidad de tasa negativa en Vasicek es mínima).
+
+## D28 — Herding: correlación promedio, prueba CSAD y VaR con manada
+**Fecha:** 2026-11-09
+**Responsable:** Danna Caballero
+**Decisión:**
+- Señales de manada: correlación promedio entre los 45 pares en ventanas móviles (21, 63 o 126 sesiones) y la prueba
+  CSAD de Chang, Cheng y Khorana (2000), con errores de Newey-West (5 rezagos).
+- Simulación de inversionistas que se copian: r_i = σ_i(√h·M + √(1 − h)·ε_i), con M común y ε con las correlaciones
+  reales. Las volatilidades no cambian y la correlación pasa a h + (1 − h)ρ_ij. Con h = 0 el VaR es exactamente el
+  VaR normal de la pestaña Riesgo (misma cartera, covarianza y horizonte).
+- El pico histórico de la correlación promedio se traduce a su h equivalente, para dar un escenario de estrés basado
+  en los datos y no solo en un valor elegido a mano.
+**Por qué:** separa el efecto de la manada (las acciones se mueven juntas) del de la volatilidad individual, y lo
+conecta con el VaR que ya usa la app. La mezcla convexa de matrices de correlación siempre es válida.
+**Alternativas consideradas:** modelos de agentes (Kirman, Cont-Bouchaud): más realistas en la dinámica, pero sus
+parámetros no se pueden calibrar con nuestros datos y su resultado no se compara directamente con el VaR de Riesgo.
+
+## D29 — Opciones reales con el árbol CRR
+**Fecha:** 2026-11-09
+**Responsable:** Danna Caballero
+**Decisión:**
+- Proyecto petrolero de ejemplo con cifras editables (V₀ = 100, I = 110, T = 3 años, N = 36, expansión de 50 % por 40,
+  rescate de 60, en millones de USD). σ: promedio de XOM y CVX (o una de ellas, o manual); δ: su dividendo promedio;
+  r: la del Tesoro.
+- Cada flexibilidad es una opción americana sobre V en el árbol CRR del Paso 8: esperar (call, K = I), expandir
+  (e·V − I_e), abandonar (put, K = A) y las dos (se ejerce una sola). Mapa de decisiones nodo por nodo y sensibilidad
+  a σ.
+**Por qué:** reutiliza el árbol ya validado (control 10,4506) y las pruebas comprueban que esperar y abandonar coinciden
+con la call y la put americanas de `crr.precio_crr`. Usar la volatilidad de acciones del sector es una aproximación
+habitual cuando no hay historia del proyecto (la acción incluye apalancamiento y otros proyectos).
+**Alternativas consideradas:** Monte Carlo con mínimos cuadrados (Longstaff-Schwartz): necesario con varias fuentes de
+incertidumbre, innecesario con una sola.
+
 ---
 
 _Plantilla para nuevas decisiones:_

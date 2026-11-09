@@ -489,3 +489,252 @@ def lectura_escalamiento(ticker: str, h: float, fac: float, h_var: int, v, vered
         texto += (" Pero esa diferencia está dentro de lo que produce el azar con esta cantidad de datos, así que no hay "
                   "razón para cambiar la regla √h que usa la pestaña Riesgo.")
     return texto
+
+
+# ---------------------------------------------------------------------------
+# Ornstein-Uhlenbeck · Vasicek
+# ---------------------------------------------------------------------------
+INTRO_OU = (
+    "El GBM deja que el precio se aleje sin límite de donde está hoy. Algunas variables no se comportan así: "
+    "<b>vuelven a un nivel normal</b>, como un resorte. Ornstein-Uhlenbeck mide <b>a qué nivel vuelven y qué tan "
+    "rápido</b>; aplicado a la tasa de interés se llama modelo de <b>Vasicek</b>. Lo usamos para dos preguntas: "
+    "<b>¿cuánto puede moverse la tasa del Tesoro durante la vida de la opción, y cuánto cambia la prima?</b> y "
+    "<b>si dos acciones del mismo sector se separan, ¿vuelven a juntarse?</b>")
+
+
+def _anios_o_dias(anios: float) -> str:
+    if not np.isfinite(anios):
+        return "no se cierra"
+    if anios < 1:
+        return f"{anios * 252:.0f} sesiones"
+    return f"{_num(anios, 1)} años"
+
+
+def variables_vasicek(ou, nombre: str, formato) -> list[tuple[str, str, str, str, str]]:
+    """ou: modelos.OUCalibrado. formato: función que convierte un valor de la variable en texto."""
+    return [
+        ("θ", "Nivel de largo plazo", formato(ou.theta),
+         f"El valor al que tiende a volver {nombre}.",
+         "Si sube, todo el abanico futuro se desplaza hacia ese nivel más alto."),
+        ("κ", "Velocidad de regreso", f"{_num(ou.kappa, 2)}/año",
+         f"Qué tan rápido se cierra la distancia a θ. Vida media: {_anios_o_dias(ou.vida_media)}.",
+         "Si sube, el regreso es más rápido y el rango futuro es más estrecho; con κ = 0 no hay regreso y es "
+         "un camino al azar."),
+        ("σ", "Volatilidad", f"{formato(ou.sigma)}/año",
+         "El tamaño de los choques que lo alejan de su nivel normal.",
+         "Si sube, el rango futuro se ensancha, pero (si κ > 0) no crece sin límite como en el GBM."),
+    ]
+
+
+def lectura_tasa(ou, r_hoy: float, rango: tuple[float, float], meses: int) -> str:
+    bajo, alto = rango
+    texto = (f"Hoy la tasa continua del Tesoro es <b>{_pct(r_hoy, 2)}</b>. Con su historia, Vasicek estima un nivel de "
+             f"largo plazo de <b>{_pct(ou.theta, 2)}</b>")
+    if ou.evidencia == "ninguna":
+        texto += (", pero la prueba no encuentra evidencia de que la tasa regrese a un nivel fijo en esta muestra, así "
+                  "que ese θ es <b>poco confiable</b>: la tasa del Tesoro sigue las decisiones de la Reserva Federal, que "
+                  "pueden cambiar su nivel de forma duradera. Conviene leer el abanico como un rango de sensibilidad. ")
+    else:
+        texto += (f" y una vida media de {_anios_o_dias(ou.vida_media)}: la tasa {'sube' if ou.theta > r_hoy else 'baja'} "
+                  f"poco a poco hacia ese nivel. ")
+    texto += (f"En {meses} meses, el 80 % de los escenarios deja la tasa entre <b>{_pct(bajo, 2)}</b> y "
+              f"<b>{_pct(alto, 2)}</b>.")
+    return texto
+
+
+def lectura_prima_tasa(primas: dict, prima_hoy: float, tipo: str, dias: int, r_bajo: float, r_alto: float) -> str:
+    rango = abs(primas["alta"] - primas["baja"])
+    rel = rango / prima_hoy if prima_hoy > 0 else 0.0
+    sentido = ("sube cuando sube la tasa (una tasa alta abarata pagar el strike en el futuro)" if tipo == "call"
+               else "baja cuando sube la tasa (el strike que se recibe vale menos hoy)")
+    texto = (f"La {tipo} vale {_usd(prima_hoy)} con la tasa de hoy. Si la tasa promedio de los próximos {dias} días "
+             f"queda entre {_pct(r_bajo, 2)} y {_pct(r_alto, 2)}, la prima se movería entre "
+             f"<b>{_usd(min(primas.values()))}</b> y <b>{_usd(max(primas.values()))}</b>: un rango de {_usd(rango)} "
+             f"({_pct(rel)} de la prima). La prima {sentido}. ")
+    if rel < 0.05:
+        texto += ("Es un efecto pequeño: en una opción de pocos meses, el riesgo de tasa importa mucho menos que el "
+                  "precio de la acción o su volatilidad, así que usar una tasa fija en el árbol CRR es razonable.")
+    else:
+        texto += ("Es un efecto apreciable: conviene revisar la tasa usada en el árbol CRR si el vencimiento es largo.")
+    return texto
+
+
+def lectura_spread(a: str, b: str, ou, hoy: float, desde) -> str:
+    """hoy: diferencia de log-rendimientos acumulados desde `desde`, ln(P_a/P_a0) − ln(P_b/P_b0)."""
+    dif = np.expm1(hoy)
+    texto = (f"Desde el {desde:%d/%m/%Y}, {a} acumula un rendimiento relativo <b>{_pct(abs(dif))} "
+             f"{'mayor' if dif > 0 else 'menor'}</b> que {b}. Frente a su nivel de largo plazo, la diferencia de hoy está "
+             f"a <b>{_num(ou.z_hoy, 1)} desviaciones</b>. ")
+    if ou.evidencia == "fuerte":
+        texto += (f"Hay evidencia clara de que la diferencia <b>vuelve</b> a su nivel: la mitad de una separación se cierra "
+                  f"en unas <b>{_anios_o_dias(ou.vida_media)}</b>. ")
+    elif ou.evidencia == "débil":
+        texto += (f"Hay evidencia <b>débil</b> (solo al 10 % de significancia) de que la diferencia vuelve a su nivel, con "
+                  f"una vida media de unas {_anios_o_dias(ou.vida_media)}. ")
+    else:
+        texto += ("No hay evidencia estadística de que la diferencia vuelva a un nivel fijo: las dos acciones pueden "
+                  "separarse de forma duradera. ")
+    if ou.evidencia != "ninguna" and abs(ou.z_hoy) >= 2:
+        texto += (f"Como la separación de hoy es grande, el modelo espera que se cierre: {a if ou.z_hoy > 0 else b} "
+                  "debería rendir menos que la otra en los próximos meses. ")
+    if ou.evidencia != "ninguna":
+        texto += ("Para la cartera, esto significa que las dos acciones del mismo sector diversifican poco entre sí: "
+                  "si se separan, tienden a reencontrarse.")
+    return texto
+
+
+# ---------------------------------------------------------------------------
+# Herding: comportamiento en manada
+# ---------------------------------------------------------------------------
+INTRO_HERDING = (
+    "El VaR de la pestaña Riesgo usa las correlaciones históricas: supone que las acciones se acompañan tanto como "
+    "lo hicieron en el pasado. Pero cuando hay miedo o euforia, los inversionistas <b>dejan de mirar su propia "
+    "información y copian lo que hacen los demás</b>: todos venden (o compran) a la vez y las acciones se mueven "
+    "juntas. El efecto manada responde: <b>¿hay señales de manada en nuestras acciones, y qué le pasa a nuestro "
+    "riesgo cuando todos actúan igual?</b>")
+
+
+def variables_herding(rho_hoy: float, rho_max: float, h_sel: float, g2: float) -> list[tuple[str, str, str, str, str]]:
+    return [
+        ("ρ̄", "Correlación promedio", _num(rho_hoy, 2),
+         "Qué tanto se mueven juntas, en promedio, las 10 acciones (0 = cada una por su lado, 1 = todas igual).",
+         f"Si sube, la diversificación se pierde. Su máximo en la historia fue {_num(rho_max, 2)}."),
+        ("h", "Intensidad de manada", _num(h_sel, 2),
+         "La parte del movimiento de cada acción que viene de copiar a la multitud y no de su propia información.",
+         "Si sube, las correlaciones se acercan a 1 y el VaR de la cartera crece aunque ninguna acción sea más volátil."),
+        ("γ₂", "Prueba CSAD", _num(g2, 2),
+         "Mide si en los días de movimientos fuertes del mercado las acciones se parecen más de lo normal.",
+         "Si es negativo y significativo, hay manada: en los días extremos todos hacen lo mismo."),
+    ]
+
+
+def lectura_correlacion_movil(serie, rho_cal: float, ventana: int) -> str:
+    pico = serie.idxmax()
+    valle = serie.idxmin()
+    hoy = float(serie.iloc[-1])
+    texto = (f"Con ventanas de {ventana} sesiones, la correlación promedio entre nuestras acciones fue en general "
+             f"{_num(serie.median(), 2)}, pero no es estable: llegó a <b>{_num(serie.max(), 2)}</b> en la ventana que "
+             f"termina el {pico:%d/%m/%Y} y bajó a {_num(serie.min(), 2)} el {valle:%d/%m/%Y}. Hoy está en "
+             f"<b>{_num(hoy, 2)}</b>. ")
+    texto += (f"El VaR de la pestaña Riesgo usa un promedio de {_num(rho_cal, 2)} (ventana de calibración). Cuando la "
+              "correlación sube, la diversificación protege menos, y en los mercados eso suele ocurrir en momentos "
+              "de estrés, justo cuando más se necesita.")
+    return texto
+
+
+def lectura_csad(c) -> str:
+    texto = (f"Cada punto es un día: el movimiento promedio del mercado (eje horizontal) y qué tan distintas fueron "
+             f"las acciones entre sí ese día (CSAD). La curva ajustada tiene γ₂ = {_num(c.g2, 2)} "
+             f"(estadístico t = {_num(c.t_g2, 2)}). ")
+    if c.hay_manada:
+        texto += ("Es <b>negativo y significativo</b>: en los días de movimientos grandes, nuestras acciones se parecen "
+                  "más de lo que deberían. Hay <b>evidencia de manada</b>.")
+    elif c.g2 < 0:
+        texto += ("Es negativo, pero no significativo: hay una señal débil de manada que no alcanza a ser concluyente.")
+    else:
+        texto += ("No es negativo: en los días de movimientos grandes, las acciones se separan <b>más</b>, no menos. "
+                  "<b>No hay evidencia de manada</b> en el sentido de la prueba CSAD: en los días de movimientos "
+                  "fuertes, nuestras acciones reaccionan de forma distinta entre sí. Aun así, la correlación sí sube en ciertos episodios, "
+                  "así que vale la pena medir qué pasaría con el riesgo si los inversionistas se copiaran.")
+    return texto
+
+
+def lectura_var_manada(var0: float, var_h: float, var_pico: float, h_sel: float, h_pico: float, rho_pico: float,
+                       var_max: float, capital: float, alpha: float, horizonte: int) -> str:
+    texto = (f"Sin manada adicional (h = 0), el VaR normal al {_pct(alpha, 0)} y {horizonte} días es <b>{_usd(var0)}</b>, "
+             "el mismo de la pestaña Riesgo. ")
+    if h_sel > 0:
+        texto += (f"Con h = {_num(h_sel, 2)}, sube a <b>{_usd(var_h)}</b> ({_pct(var_h / var0 - 1)} más). ")
+    texto += (f"Si la correlación volviera a su pico histórico ({_num(rho_pico, 2)}, equivalente a h = {_num(h_pico, 2)}), "
+              f"el VaR sería {_usd(var_pico)}. En el extremo, si todos se copiaran por completo (h = 1), sería "
+              f"<b>{_usd(var_max)}</b> ({_pct(var_max / capital)} del capital): ya no habría diversificación y la cartera "
+              "se comportaría como una sola acción. Ninguna volatilidad individual cambió; todo el aumento viene de que "
+              "las acciones dejan de compensarse entre sí.")
+    return texto
+
+
+# ---------------------------------------------------------------------------
+# Opciones reales
+# ---------------------------------------------------------------------------
+INTRO_OPCIONES_REALES = (
+    "El VPN tradicional decide hoy, de una vez: invertir o no. Pero un proyecto real tiene <b>flexibilidad</b>: se "
+    "puede esperar a ver cómo evoluciona el mercado, crecer si va bien o vender los activos si va mal. Esa "
+    "flexibilidad funciona como una opción americana sobre el valor del proyecto y se valora con el <b>mismo árbol "
+    "CRR</b> de la pestaña Opciones. Pregunta: <b>¿cuánto vale poder esperar, expandir o abandonar un proyecto "
+    "petrolero con la volatilidad de nuestras acciones de energía?</b>")
+
+
+def variables_opciones_reales(v0, inversion, sigma, r, delta, t, nombre_sigma) -> list[tuple[str, str, str, str, str]]:
+    return [
+        ("V₀", "Valor del proyecto", _usd(v0) + " M",
+         "Valor presente de los flujos que generaría el proyecto. Hace el papel del precio de la acción.",
+         "Si sube, el proyecto se vuelve más atractivo: vale más esperar para invertir y menos abandonar."),
+        ("I", "Inversión", _usd(inversion) + " M", "Lo que cuesta hacer el proyecto. Hace el papel del strike.",
+         "Si sube, baja el VPN; la opción de esperar gana importancia frente a invertir ya."),
+        ("σ", "Volatilidad del proyecto", _pct(sigma),
+         f"Incertidumbre sobre el valor del proyecto; se toma de {nombre_sigma}.",
+         "Si sube, toda la flexibilidad vale más: hay más que ganar esperando a ver qué pasa."),
+        ("δ", "Flujos que se pierden al esperar", _pct(delta),
+         "Mientras se espera, el proyecto no produce. Hace el papel del dividendo q.",
+         "Si sube, esperar cuesta más y conviene invertir antes."),
+        ("r · T", "Tasa y plazo", f"{_pct(r, 2)} · {_num(t, 1)} años",
+         "Tasa libre de riesgo del Tesoro y tiempo máximo para decidir.",
+         "Si T sube, hay más tiempo para que se resuelva la incertidumbre y la flexibilidad vale más."),
+    ]
+
+
+def lectura_opciones_reales(res: dict, vpn: float) -> str:
+    """res: {tipo: OpcionReal}."""
+    esp = res["esperar"]
+    texto = f"Invirtiendo hoy, el VPN estático es <b>{_usd(vpn)} M</b>"
+    texto += (", así que con la regla tradicional el proyecto <b>se rechazaría</b>. " if vpn < 0
+              else ", así que con la regla tradicional se aceptaría de inmediato. ")
+    texto += (f"Con la opción de <b>esperar</b> hasta {_num(esp.tiempos[-1], 1)} años, el proyecto vale "
+              f"<b>{_usd(esp.vpn_estrategico)} M</b>")
+    if esp.decision[0][0] == "Invertir":
+        texto += ": aun así conviene invertir hoy, porque esperar cuesta más (flujos perdidos) de lo que se gana. "
+    else:
+        texto += ": hoy lo óptimo es <b>esperar</b> y decidir con más información. "
+    texto += (f"Ya hecho el proyecto, poder <b>expandirlo</b> vale {_usd(res['expandir'].opcion)} M, poder "
+              f"<b>abandonarlo</b> vale {_usd(res['abandonar'].opcion)} M y tener las dos opciones vale "
+              f"{_usd(res['expandir o abandonar'].opcion)} M, con lo que el VPN pasa de {_usd(vpn)} M a "
+              f"<b>{_usd(res['expandir o abandonar'].vpn_estrategico)} M</b>. ")
+    suma = res["expandir"].opcion + res["abandonar"].opcion
+    if res["expandir o abandonar"].opcion < suma - 0.005:
+        texto += ("Las dos juntas valen menos que la suma por separado, porque no se pueden usar a la vez: si el proyecto "
+                  "va bien se expande y si va mal se abandona.")
+    else:
+        texto += ("Las dos juntas valen prácticamente la suma de cada una: se usan en escenarios opuestos (expandir si "
+                  "va bien, abandonar si va mal), así que casi nunca compiten.")
+    return texto
+
+
+def lectura_mapa_decision(o, tipo: str) -> str:
+    etiqueta = {"esperar": "Invertir", "expandir": "Expandir", "abandonar": "Abandonar"}.get(tipo)
+    nodos = [(t, v, dd) for t, vs, ds in zip(o.tiempos, o.valores_v, o.decision) for v, dd in zip(vs, ds)]
+    if tipo == "esperar":
+        frontera = [min((v for t_, v, dd in nodos if t_ == t and dd == "Invertir"), default=None) for t in o.tiempos]
+        f = [x for x in frontera if x is not None]
+        if not f:
+            return "Con estos valores nunca conviene invertir antes del plazo: la opción de esperar domina en todo el árbol."
+        return (f"Cada punto es un posible valor futuro del proyecto. Al comienzo solo conviene invertir si el proyecto "
+                f"llega a valer unos <b>{_usd(f[0])} M</b>; al final del plazo basta con que supere la inversión. Esa "
+                "frontera desciende porque, a medida que se acaba el tiempo, esperar vale menos. Por encima de la "
+                "frontera se invierte; por debajo, se espera.")
+    if tipo == "expandir o abandonar":
+        return ("Cada punto es un posible valor futuro del proyecto. En la zona alta conviene <b>expandir</b> y en la "
+                "baja <b>abandonar</b>; en el medio se sigue operando sin cambios y se conserva la flexibilidad.")
+    n_ej = sum(1 for _, _, dd in nodos if dd == etiqueta)
+    return (f"Cada punto es un posible valor futuro del proyecto. En {n_ej} de los {len(nodos)} nodos del árbol conviene "
+            f"<b>{etiqueta.lower()}</b>; en los demás, lo óptimo es seguir y mantener la opción abierta.")
+
+
+def lectura_sensibilidad_or(tabla, sigmas_ref: dict) -> str:
+    fila_baja, fila_alta = tabla.dropna().iloc[0], tabla.dropna().iloc[-1]
+    texto = (f"Con volatilidad de {_pct(fila_baja['σ'], 0)}, la flexibilidad de esperar vale {_usd(fila_baja['esperar'])} M; "
+             f"con {_pct(fila_alta['σ'], 0)}, <b>{_usd(fila_alta['esperar'])} M</b>. ")
+    texto += ("A diferencia del VPN, que castiga la incertidumbre con una tasa de descuento más alta, aquí <b>más "
+              "incertidumbre vale más</b>: la flexibilidad permite quedarse con lo bueno y evitar lo malo. ")
+    if sigmas_ref:
+        texto += "Las líneas verticales marcan " + _lista([f"{k} ({_pct(v)})" for k, v in sigmas_ref.items()]) + "."
+    return texto

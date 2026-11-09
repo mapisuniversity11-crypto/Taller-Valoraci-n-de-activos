@@ -64,9 +64,10 @@ src/
   rolling.py        Paso 13 — evaluación rolling del GBM
   asignacion.py     Pasos 11–12 — asignación y estrategias
   exportar.py       Exportación de resultados en CSV (ZIP) con resumen de parámetros y semilla
-  modelos.py        Pestaña Modelos — browniano estándar, Merton, browniano fraccional
+  modelos.py        Pestaña Modelos — browniano estándar, Merton, browniano fraccional,
+                    Ornstein-Uhlenbeck / Vasicek, herding y opciones reales
 tests/              Pruebas automáticas (p. ej. control CRR = 10,4506)
-data/raw/           Datos de respaldo descargados + metadatos
+data/raw/           Datos de respaldo descargados + metadatos (precios, cadena de opciones, ^IRX)
 docs/
   decisiones.md     Bitácora de decisiones y su justificación
   plan.md           Plan de trabajo por entrega
@@ -81,7 +82,7 @@ requirements-dev.txt  Lo anterior + pytest
 |---|---|---|
 | 1 | Datos y CRR | Lista |
 | 2 | GBM, contrato, rolling, VaR | Lista |
-| 3 | Asignación y demostración | Asignación y exportación CSV listas; falta demostración |
+| 3 | Asignación, modelos y demostración | Asignación, exportación CSV y pestaña Modelos (seis modelos) listas; falta demostración |
 
 ## Reproducibilidad
 

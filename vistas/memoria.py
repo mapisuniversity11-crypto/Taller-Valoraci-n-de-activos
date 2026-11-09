@@ -34,3 +34,13 @@ def var_montecarlo(precios: pd.DataFrame, w: pd.Series, capital: float, alpha: f
 @st.cache_data(show_spinner=False, max_entries=16)
 def excepciones(precios: pd.DataFrame, w: pd.Series, capital: float, alpha: float, inicio):
     return riesgo.excepciones(precios, w, capital, alpha, inicio)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def correlacion_movil(x: pd.DataFrame, ventana: int) -> pd.Series:
+    return modelos.correlacion_promedio_movil(x, ventana)
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def simular_manada(cov: pd.DataFrame, w: pd.Series, capital: float, h: float, horizonte: int, n: int, semilla: int):
+    return modelos.simular_manada(cov, w, capital, h, horizonte, n, semilla)

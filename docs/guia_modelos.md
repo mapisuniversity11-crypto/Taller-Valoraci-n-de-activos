@@ -1,13 +1,15 @@
 # Guía para agregar un modelo a la pestaña Modelos
 
-La pestaña **Modelos** tiene seis subpestañas. Tres ya están completas (browniano estándar, Merton y browniano
-fraccional) y sirven de ejemplo. Las otras tres muestran por ahora una tarjeta "en construcción":
+La pestaña **Modelos** tiene seis subpestañas, todas completas. Sirven de ejemplo para agregar otras:
 
-| Subpestaña | Datos sugeridos | Pregunta que responde |
+| Subpestaña | Datos | Pregunta que responde |
 |---|---|---|
-| Ornstein-Uhlenbeck · Vasicek | Tasa del Tesoro a 13 semanas (`^IRX`, histórico con yfinance) y la diferencia de log-precios XOM − CVX | ¿Cuánto puede moverse la tasa durante la vida de la opción y cuánto cambia la prima? Si dos acciones del mismo sector se separan, ¿vuelven a juntarse? |
-| Herding · manada | Las 10 acciones y la cartera | ¿Qué pasa con el riesgo cuando todos actúan igual? Correlación promedio en el tiempo y simulación de inversionistas que se copian, con su efecto en el VaR |
-| Opciones reales | Proyecto de ejemplo (cifras editables), σ de XOM y CVX, r del Tesoro, árbol CRR de `src/crr.py` | ¿Cuánto vale poder esperar, expandir o abandonar? |
+| Browniano estándar | Precio ajustado de la acción elegida | ¿Por qué proyectar con el GBM y no con movimientos fijos en dólares? |
+| Merton · saltos | Retornos del subyacente y el contrato elegido | ¿Cuántos saltos hay y cuánto más vale la opción por ese riesgo? |
+| Browniano fraccional | Toda la historia de las 10 acciones | ¿Tienen memoria los retornos? ¿Sirve la regla √h del VaR? |
+| Ornstein-Uhlenbeck · Vasicek | Tasa del Tesoro a 13 semanas (`^IRX`, histórico con yfinance, respaldo en `data/raw/tasa_irx.csv`) y la diferencia de log-rendimientos de dos acciones del mismo sector (XOM − CVX por defecto) | ¿Cuánto puede moverse la tasa durante la vida de la opción y cuánto cambia la prima? Si dos acciones del mismo sector se separan, ¿vuelven a juntarse? |
+| Herding · manada | Las 10 acciones y la cartera elegida en Riesgo | ¿Hay señales de manada (correlación promedio en el tiempo, prueba CSAD) y qué le pasa al VaR cuando todos se copian? |
+| Opciones reales | Proyecto de ejemplo (cifras editables), σ y dividendos de XOM y CVX, r del Tesoro, árbol CRR | ¿Cuánto vale poder esperar, expandir o abandonar? |
 
 ## Estructura que debe tener cada subpestaña
 
@@ -32,8 +34,9 @@ Mismo orden y mismo estilo que las tres que ya están:
 - **Cálculos:** funciones en `src/modelos.py`, sin Streamlit, para poder probarlas.
 - **Frases:** en `src/lecturas.py`. Se calculan con los datos de cada ejecución, así que se actualizan solas.
   Usa `_usd`, `_pct` y `_num` para el formato en español.
-- **Pantalla:** en `vistas/modelos.py`, dentro de `with sub[3]:`, `with sub[4]:` o `with sub[5]:`. Hay que borrar la
-  tarjeta "en construcción" de la lista `pendientes`. No hace falta tocar `app.py` ni las otras vistas.
+- **Pantalla:** en `vistas/modelos.py`, dentro de su `with sub[i]:`. Para una subpestaña nueva, se agrega su nombre
+  a `st.tabs([...])`. No hace falta tocar `app.py` ni las otras vistas, salvo que el modelo necesite datos nuevos que
+  se descarguen al ejecutar (como el histórico de `^IRX`, que se obtiene en `app.py` y llega en `res["irx"]`).
 - **Pruebas:** en `tests/test_modelos.py`, por ejemplo un caso con respuesta conocida.
 - **Decisiones:** una entrada nueva en `docs/decisiones.md`.
 
@@ -54,6 +57,7 @@ porque Riesgo se dibuja antes que Modelos.
 | `opcion` | Entradas del panel de la opción (S0, K, T, r, q, σ, N, tipo) |
 | `carteras`, `cov_v`, `B`, `alpha_v`, `h_v` | Pesos de las carteras, covarianza diaria, capital, confianza y horizonte del VaR |
 | `cartera_v`, `w_v`, `r_hist`, `r_norm`, `r_mc` | Cartera elegida en Riesgo, sus pesos y su VaR/ES por los tres métodos |
+| `res["irx"]` | Histórico de `^IRX` en porcentaje (o `None` si no se pudo descargar ni hay respaldo) |
 | `semilla_base` | Semilla de la app; úsala para que los resultados sean reproducibles |
 
 ## Reglas de estilo
