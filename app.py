@@ -308,6 +308,15 @@ if ejecutar:
                     error_cadena = None
                 elif error_cadena is None:
                     error_cadena = "No hay una cadena de opciones guardada en data/raw para este subyacente."
+            # Histórico de la tasa del Tesoro (^IRX) para el modelo de Vasicek (pestaña Modelos).
+            # Si no se puede descargar, se usa el guardado en data/raw; si tampoco hay, esa parte se omite.
+            irx = None
+            if descargar_op:
+                irx = datos.historial_irx_yahoo(fecha_inicio, fecha_fin)
+                if irx is not None and periodo["guardar"]:
+                    datos.guardar_irx(irx)
+            if irx is None:
+                irx = datos.cargar_irx()
             st.session_state["res"] = {
                 "crudos": crudos,
                 "limpio": limpio,
@@ -321,6 +330,7 @@ if ejecutar:
                 "ticker_opcion": opcion["ticker"],
                 "cadena": cadena, "meta_cadena": meta_cadena, "error_cadena": error_cadena,
                 "aviso_fuente": aviso_fuente,
+                "irx": irx,
             }
         st.session_state.pop("error", None)
         calculo_ok = True

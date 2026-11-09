@@ -27,6 +27,7 @@ CARPETA_RESPALDO = Path(__file__).resolve().parent.parent / "data" / "raw"
 ARCHIVO_AJUSTADOS = "precios_ajustados.csv"
 ARCHIVO_SIN_AJUSTAR = "precios_sin_ajustar.csv"
 ARCHIVO_META = "metadatos.json"
+ARCHIVO_IRX = "tasa_irx.csv"
 
 
 @dataclass
@@ -214,6 +215,47 @@ def tasa_libre_riesgo_yahoo(ultimo_dia: date) -> dict | None:
                 "r": float(np.log1p(y)), "fuente": "Yahoo Finance ^IRX (T-bill 13 semanas)"}
     except Exception:
         return None
+
+
+def historial_irx_yahoo(inicio: date, ultimo_dia: date) -> pd.Series | None:
+    """Histórico diario de ^IRX (letra del Tesoro a 13 semanas, en porcentaje anual) para el modelo de
+    Vasicek de la pestaña Modelos. Devuelve None si falla."""
+    import yfinance as yf
+
+    try:
+        df = yf.download(["^IRX"], start=inicio, end=ultimo_dia + timedelta(days=1), auto_adjust=False,
+                         progress=False)
+        serie = _extraer_cierre(df, ["^IRX"])["^IRX"].dropna()
+        serie = serie[(serie >= 0) & (serie <= 20)]   # mismo control de cordura que tasa_libre_riesgo_yahoo
+        if len(serie) < 60:
+            return None
+        serie.index = pd.to_datetime(serie.index).tz_localize(None)
+        serie.index.name = "Fecha"
+        serie.name = "IRX (%)"
+        return serie.astype(float)
+    except Exception:
+        return None
+
+
+def guardar_irx(serie: pd.Series, carpeta: Path = CARPETA_RESPALDO) -> Path:
+    carpeta.mkdir(parents=True, exist_ok=True)
+    ruta = carpeta / ARCHIVO_IRX
+    serie.rename("IRX (%)").to_csv(ruta)
+    return ruta
+
+
+def cargar_irx(carpeta: Path = CARPETA_RESPALDO) -> pd.Series | None:
+    """Histórico de ^IRX guardado en data/raw, o None si no existe."""
+    ruta = carpeta / ARCHIVO_IRX
+    if not ruta.exists():
+        return None
+    df = _leer_csv_precios(ruta)
+    return df.iloc[:, 0].dropna().rename("IRX (%)")
+
+
+def r_continua_desde_irx(irx_porcentaje: pd.Series) -> pd.Series:
+    """Misma conversión que tasa_libre_riesgo_yahoo: r = ln(1 + IRX / 100)."""
+    return np.log1p(irx_porcentaje / 100).rename("r")
 
 
 # ---------------------------------------------------------------------------

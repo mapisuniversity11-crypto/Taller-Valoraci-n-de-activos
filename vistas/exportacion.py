@@ -105,6 +105,10 @@ def mostrar(ctx: dict, zona_exportar) -> None:
                                if det_r_x else None),
         "22_modelos_hurst": _g("tab_h").set_index("Ticker") if _g("tab_h") is not None else None,
         "23_modelos_merton_saltos": (pd.DataFrame({"Movimiento del día": mer_x.tamanos}) if mer_x else None),
+        "24_modelos_ou_vasicek": _g("ou_tabla"),
+        "25_modelos_herding_var": _g("var_manada").set_index("h") if _g("var_manada") is not None else None,
+        "26_modelos_herding_correlacion_movil": (_g("rho_movil").to_frame() if _g("rho_movil") is not None else None),
+        "27_modelos_opciones_reales": _g("or_tabla"),
     }
 
     conf_x = _g("cartera_v")
@@ -123,6 +127,8 @@ def mostrar(ctx: dict, zona_exportar) -> None:
             "VaR Monte Carlo": semilla_base,
             "Probabilidades de la opción": semilla_base,
             "Hurst (permutaciones)": "semilla + posición del ticker",
+            "Vasicek (trayectorias de la tasa)": semilla_base,
+            "Herding (escenarios de manada)": semilla_base,
         },
         "Universo": {t: sect[t] for t in tickers},
         "Ventanas": {
